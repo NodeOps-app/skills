@@ -1,6 +1,6 @@
 {
   "name": "createos",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "CreateOS Cloud Deployment Platform - Ship anything to production",
   "mcp": {
     "endpoint": "https://api-createos.nodeops.network/mcp",
@@ -37,19 +37,20 @@
       "cancel": "POST /v1/projects/{project_id}/deployments/{deployment_id}/cancel",
       "retry": "POST /v1/projects/{project_id}/deployments/{deployment_id}/retry",
       "wake": "POST /v1/projects/{project_id}/deployments/{deployment_id}/wake",
-      "upload_files": "POST /v1/projects/{project_id}/deployments/files",
-      "upload_zip": "POST /v1/projects/{project_id}/deployments/zip",
+      "upload_files": "PUT /v1/projects/{project_id}/deployments/files",
+      "upload_base64_files": "PUT /v1/projects/{project_id}/deployments/files/base64",
+      "upload_zip": "POST /v1/projects/{project_id}/deployments/zip (not consistently available)",
       "build_logs": "GET /v1/projects/{project_id}/deployments/{deployment_id}/logs/build",
       "runtime_logs": "GET /v1/projects/{project_id}/deployments/{deployment_id}/logs/runtime"
     },
     "environments": {
       "create": "POST /v1/projects/{project_id}/environments",
       "list": "GET /v1/projects/{project_id}/environments",
-      "update": "PATCH /v1/projects/{project_id}/environments/{environment_id}",
+      "update": "PUT /v1/projects/{project_id}/environments/{environment_id}",
       "delete": "DELETE /v1/projects/{project_id}/environments/{environment_id}",
-      "assign": "POST /v1/projects/{project_id}/environments/{environment_id}/assign",
-      "env_vars": "PATCH /v1/projects/{project_id}/environments/{environment_id}/variables",
-      "resources": "PATCH /v1/projects/{project_id}/environments/{environment_id}/resources",
+      "assign": "POST /v1/projects/{project_id}/environments/{environment_id}/assign (not consistently available)",
+      "env_vars": "Update via environments.update (variables endpoint not consistently available)",
+      "resources": "Update via environments.update (resources endpoint not consistently available)",
       "logs": "GET /v1/projects/{project_id}/environments/{environment_id}/logs"
     },
     "domains": {

@@ -14,7 +14,7 @@
 #   list-deployments  List deployments for a project
 #
 
-set -e
+set -euo pipefail
 
 # Configuration
 API_BASE="${CREATEOS_API_URL:-https://api-createos.nodeops.network}"
@@ -45,13 +45,28 @@ api_call() {
     local data=$3
     
     local url="${API_BASE}${endpoint}"
-    local curl_args=(-s -X "$method" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json")
+    local curl_args=(-sS -X "$method" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json")
     
     if [ -n "$data" ]; then
         curl_args+=(-d "$data")
     fi
     
     curl "${curl_args[@]}" "$url"
+}
+
+api_jq() {
+    # Print jq output and fail fast if API returned status=fail.
+    # Many CreateOS endpoints return HTTP 200 even for application-level failures.
+    local response
+    response=$(api_call "$1" "$2" "${3:-}")
+    local ok
+    ok=$(echo "$response" | jq -r 'if type=="object" and has("status") then .status else "success" end')
+    if [ "$ok" != "success" ]; then
+        local msg
+        msg=$(echo "$response" | jq -r '.data // .error.message // .error // .')
+        log_error "CreateOS API error: ${msg}"
+    fi
+    echo "$response"
 }
 
 # Commands
@@ -87,10 +102,12 @@ cmd_create_project() {
 EOF
 )
     
-    local response=$(api_call POST "/v1/projects" "$payload")
+    local response
+    response=$(api_jq POST "/v1/projects" "$payload")
     echo "$response" | jq .
     
-    local project_id=$(echo "$response" | jq -r '.id // empty')
+    local project_id
+    project_id=$(echo "$response" | jq -r '.data.id // empty')
     if [ -n "$project_id" ]; then
         log_success "Project created: $project_id"
     else
@@ -109,10 +126,12 @@ cmd_deploy() {
     
     log_info "Triggering deployment for project: $project_id (branch: $branch)"
     
-    local response=$(api_call POST "/v1/projects/$project_id/deployments/trigger" "{\"branch\": \"$branch\"}")
+    local response
+    response=$(api_jq POST "/v1/projects/$project_id/deployments/trigger" "{\"branch\": \"$branch\"}")
     echo "$response" | jq .
     
-    local deployment_id=$(echo "$response" | jq -r '.id // empty')
+    local deployment_id
+    deployment_id=$(echo "$response" | jq -r '.data.id // empty')
     if [ -n "$deployment_id" ]; then
         log_success "Deployment triggered: $deployment_id"
     fi
@@ -130,45 +149,101 @@ cmd_deploy_image() {
     
     log_info "Deploying image: $image to project: $project_id"
     
-    local response=$(api_call POST "/v1/projects/$project_id/deployments" "{\"image\": \"$image\"}")
+    local response
+    response=$(api_jq POST "/v1/projects/$project_id/deployments" "{\"image\": \"$image\"}")
     echo "$response" | jq .
 }
 
 cmd_upload() {
     local project_id=$1
     local file_path=$2
+    local mode=${3:-base64}
     
     if [ -z "$project_id" ] || [ -z "$file_path" ]; then
-        echo "Usage: $0 upload <project_id> <file_or_directory>"
+        echo "Usage: $0 upload <project_id> <file_or_directory> [base64|text]"
+        echo "  base64 (default): PUT /deployments/files/base64 (supports binaries)"
+        echo "  text:             PUT /deployments/files (UTF-8 text only)"
         exit 1
+    fi
+
+    if [ "$mode" != "base64" ] && [ "$mode" != "text" ]; then
+        log_error "Invalid upload mode: $mode (use base64 or text)"
+    fi
+
+    local endpoint
+    if [ "$mode" = "base64" ]; then
+        endpoint="/v1/projects/$project_id/deployments/files/base64"
+    else
+        endpoint="/v1/projects/$project_id/deployments/files"
     fi
     
     if [ -d "$file_path" ]; then
-        log_info "Uploading directory: $file_path"
-        
-        # Create temporary zip
-        local temp_zip="/tmp/createos_upload_$$.zip"
-        (cd "$file_path" && zip -r "$temp_zip" .)
-        
-        curl -s -X POST \
-            -H "X-Api-Key: $API_KEY" \
-            -F "file=@$temp_zip" \
-            "${API_BASE}/v1/projects/$project_id/deployments/zip" | jq .
-        
-        rm -f "$temp_zip"
+        log_info "Uploading directory ($mode): $file_path"
     elif [ -f "$file_path" ]; then
-        if [[ "$file_path" == *.zip ]]; then
-            log_info "Uploading zip file: $file_path"
-            curl -s -X POST \
-                -H "X-Api-Key: $API_KEY" \
-                -F "file=@$file_path" \
-                "${API_BASE}/v1/projects/$project_id/deployments/zip" | jq .
-        else
-            log_error "For single files, please provide a directory or zip file"
-        fi
+        log_info "Uploading file ($mode): $file_path"
     else
         log_error "Path not found: $file_path"
     fi
+
+    # Build payload using python to avoid shell quoting issues.
+    # Default ignore patterns are tuned for typical JS/Python repos.
+    local payload
+    payload=$(python3 - "$file_path" "$mode" <<'PY'
+import base64
+import json
+import os
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+mode = sys.argv[2]
+
+IGNORE_DIRS = {'.git', 'node_modules', '.next', '.turbo', '.cache', '__pycache__', '.venv', '.agents', '.claude'}
+IGNORE_FILES = {'.DS_Store'}
+
+def iter_files(p: Path):
+    if p.is_file():
+        yield p, Path(p.name)
+        return
+
+    for fp in p.rglob('*'):
+        if fp.is_dir():
+            continue
+        rel = fp.relative_to(p)
+        parts = rel.parts
+        if any(part in IGNORE_DIRS for part in parts):
+            continue
+        if fp.name in IGNORE_FILES:
+            continue
+        yield fp, rel
+
+files = []
+for fp, rel in iter_files(root):
+    if mode == 'base64':
+        content = base64.b64encode(fp.read_bytes()).decode('ascii')
+    else:
+        content = fp.read_text(encoding='utf-8')
+    files.append({'path': rel.as_posix(), 'content': content})
+
+if len(files) == 0:
+    print(json.dumps({'files': []}))
+    sys.exit(0)
+
+if len(files) > 100:
+    raise SystemExit(f"Too many files ({len(files)}). CreateOS upload endpoints accept max 100 files per request. Use a VCS project or reduce the upload set.")
+
+print(json.dumps({'files': files}))
+PY
+)
+
+if [ -z "$payload" ]; then
+    log_error "Failed to build upload payload"
+fi
+
+log_info "Uploading to CreateOS endpoint: $endpoint"
+local response
+response=$(api_jq PUT "$endpoint" "$payload")
+echo "$response" | jq .
 }
 
 cmd_status() {
@@ -182,10 +257,10 @@ cmd_status() {
     
     if [ -n "$deployment_id" ]; then
         log_info "Getting deployment status: $deployment_id"
-        api_call GET "/v1/projects/$project_id/deployments/$deployment_id" | jq .
+        api_jq GET "/v1/projects/$project_id/deployments/$deployment_id" | jq .
     else
         log_info "Getting latest deployments for project: $project_id"
-        api_call GET "/v1/projects/$project_id/deployments?limit=5" | jq .
+        api_jq GET "/v1/projects/$project_id/deployments?limit=5" | jq .
     fi
 }
 
@@ -202,9 +277,9 @@ cmd_logs() {
     log_info "Getting $log_type logs for deployment: $deployment_id"
     
     if [ "$log_type" == "build" ]; then
-        api_call GET "/v1/projects/$project_id/deployments/$deployment_id/logs/build" | jq -r '.logs // .'
+        api_jq GET "/v1/projects/$project_id/deployments/$deployment_id/logs/build" | jq -r '.data.logs // .data // .'
     else
-        api_call GET "/v1/projects/$project_id/deployments/$deployment_id/logs/runtime?since-seconds=300" | jq -r '.logs // .'
+        api_jq GET "/v1/projects/$project_id/deployments/$deployment_id/logs/runtime?since-seconds=300" | jq -r '.data.logs // .data // .'
     fi
 }
 
@@ -234,15 +309,47 @@ cmd_env_vars() {
     env_json+="}"
     
     log_info "Updating environment variables for environment: $environment_id"
-    
-    local payload="{\"runEnvs\": $env_json}"
-    api_call PATCH "/v1/projects/$project_id/environments/$environment_id/variables" "$payload" | jq .
+
+    # CreateOS currently updates environment settings via PUT /environments/{environment_id}
+    # (no dedicated /variables endpoint).
+    local current
+    current=$(api_jq GET "/v1/projects/$project_id/environments" | jq -c --arg id "$environment_id" '.data[] | select(.id==$id)')
+    if [ -z "$current" ]; then
+        log_error "Environment not found: $environment_id"
+    fi
+
+    local payload
+    payload=$(python3 - "$current" "$env_json" <<'PY'
+import json
+import sys
+
+env_obj = json.loads(sys.argv[1])
+new_pairs = json.loads(sys.argv[2])
+
+run_envs = (env_obj.get('settings') or {}).get('runEnvs') or {}
+run_envs.update(new_pairs)
+
+payload = {
+  'displayName': env_obj.get('displayName'),
+  'uniqueName': env_obj.get('uniqueName'),
+  'description': env_obj.get('description') or '',
+  'branch': env_obj.get('branch'),
+  'isAutoPromoteEnabled': bool(env_obj.get('isAutoPromoteEnabled')),
+  'resources': env_obj.get('resources') or {'cpu': 200, 'memory': 500, 'replicas': 1},
+  'settings': {'runEnvs': run_envs},
+}
+
+print(json.dumps(payload))
+PY
+)
+
+    api_jq PUT "/v1/projects/$project_id/environments/$environment_id" "$payload" | jq .
 }
 
 cmd_list_projects() {
     local limit=${1:-10}
     log_info "Listing projects (limit: $limit)"
-    api_call GET "/v1/projects?limit=$limit" | jq .
+    api_jq GET "/v1/projects?limit=$limit" | jq .
 }
 
 cmd_list_deployments() {
@@ -255,7 +362,7 @@ cmd_list_deployments() {
     fi
     
     log_info "Listing deployments for project: $project_id"
-    api_call GET "/v1/projects/$project_id/deployments?limit=$limit" | jq .
+    api_jq GET "/v1/projects/$project_id/deployments?limit=$limit" | jq .
 }
 
 cmd_rollback() {
@@ -269,11 +376,40 @@ cmd_rollback() {
     fi
     
     log_info "Rolling back environment $environment_id to deployment $deployment_id"
-    
-    local payload="{\"deploymentId\": \"$deployment_id\"}"
-    api_call POST "/v1/projects/$project_id/environments/$environment_id/assign" "$payload" | jq .
-    
-    log_success "Rollback initiated"
+    log_warn "Note: CreateOS may not support pinning deployments on all project types."
+
+    local current
+    current=$(api_jq GET "/v1/projects/$project_id/environments" | jq -c --arg id "$environment_id" '.data[] | select(.id==$id)')
+    if [ -z "$current" ]; then
+        log_error "Environment not found: $environment_id"
+    fi
+
+    # Best-effort: update the environment object with a deployment pointer if the API honors it.
+    local payload
+    payload=$(python3 - "$current" "$deployment_id" <<'PY'
+import json
+import sys
+env_obj = json.loads(sys.argv[1])
+dep = sys.argv[2]
+
+payload = {
+  'displayName': env_obj.get('displayName'),
+  'uniqueName': env_obj.get('uniqueName'),
+  'description': env_obj.get('description') or '',
+  'branch': env_obj.get('branch'),
+  'isAutoPromoteEnabled': bool(env_obj.get('isAutoPromoteEnabled')),
+  'resources': env_obj.get('resources') or {'cpu': 200, 'memory': 500, 'replicas': 1},
+  'settings': env_obj.get('settings') or {'runEnvs': {}},
+  # Include both keys because API variants differ.
+  'deploymentId': dep,
+  'projectDeploymentId': dep,
+}
+print(json.dumps(payload))
+PY
+)
+
+    api_jq PUT "/v1/projects/$project_id/environments/$environment_id" "$payload" | jq .
+    log_success "Rollback request submitted"
 }
 
 cmd_wake() {
@@ -286,7 +422,7 @@ cmd_wake() {
     fi
     
     log_info "Waking deployment: $deployment_id"
-    api_call POST "/v1/projects/$project_id/deployments/$deployment_id/wake" | jq .
+    api_jq POST "/v1/projects/$project_id/deployments/$deployment_id/wake" | jq .
 }
 
 cmd_analytics() {
@@ -299,7 +435,7 @@ cmd_analytics() {
     fi
     
     log_info "Getting analytics for environment: $environment_id"
-    api_call GET "/v1/projects/$project_id/environments/$environment_id/analytics" | jq .
+    api_jq GET "/v1/projects/$project_id/environments/$environment_id/analytics" | jq .
 }
 
 # Main
@@ -365,7 +501,7 @@ case "${1:-help}" in
         echo "  create-project <name> <display_name> [type] [runtime] [port]"
         echo "  deploy <project_id> [branch]"
         echo "  deploy-image <project_id> <image>"
-        echo "  upload <project_id> <file_or_directory>"
+        echo "  upload <project_id> <file_or_directory> [base64|text]"
         echo "  status <project_id> [deployment_id]"
         echo "  logs <project_id> <deployment_id> [build|runtime]"
         echo "  env-vars <project_id> <environment_id> KEY=value ..."
@@ -377,7 +513,7 @@ case "${1:-help}" in
         echo ""
         echo "Examples:"
         echo "  $0 create-project my-app \"My Application\" upload node:20 3000"
-        echo "  $0 upload abc123 ./dist"
+        echo "  $0 upload abc123 ./dist base64"
         echo "  $0 deploy abc123 main"
         echo "  $0 logs abc123 def456 build"
         echo "  $0 env-vars abc123 env789 API_KEY=secret DEBUG=true"

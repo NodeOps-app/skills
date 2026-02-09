@@ -10,7 +10,7 @@
 #   ./quick-deploy.sh static <name> <directory>      Deploy static files
 #
 
-set -e
+set -euo pipefail
 
 API_BASE="${CREATEOS_API_URL:-https://api-createos.nodeops.network}"
 API_KEY="${CREATEOS_API_KEY}"
@@ -22,8 +22,26 @@ success() { echo "✓ $1"; }
 [ -z "$API_KEY" ] && die "Set CREATEOS_API_KEY environment variable"
 
 api() {
-    curl -s -X "$1" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
+    curl -sS -X "$1" -H "X-Api-Key: $API_KEY" -H "Content-Type: application/json" \
         ${3:+-d "$3"} "${API_BASE}$2"
+}
+
+api_check() {
+    local response
+    response=$(api "$1" "$2" "${3:-}")
+    local ok
+    ok=$(echo "$response" | jq -r 'if type=="object" and has("status") then .status else "success" end')
+    if [ "$ok" != "success" ]; then
+        local msg
+        msg=$(echo "$response" | jq -r '.data // .error.message // .error // .')
+        die "CreateOS API error: ${msg}"
+    fi
+    echo "$response"
+}
+
+unwrap_list() {
+    # Some endpoints return {status,data:[...]}, others return {status,data:{data:[...]}}.
+    jq -c '(.data.data // .data // .)'
 }
 
 # Deploy AI Agent (Python)
@@ -35,11 +53,14 @@ deploy_agent() {
     info "Creating AI agent project: $name"
     
     # Get GitHub installation
-    local install=$(api GET "/v1/github/accounts" | jq -r '.[0].installationId')
+    local install
+    install=$(api_check GET "/v1/github/accounts" | jq -r '(.data[0].installationId // .[0].installationId // empty)')
     [ "$install" == "null" ] && die "No GitHub account connected"
+    [ -z "$install" ] && die "No GitHub account connected"
     
     # Get repo ID
-    local repo_id=$(api GET "/v1/github/$install/repositories" | jq -r ".[] | select(.fullName==\"$repo\") | .id")
+    local repo_id
+    repo_id=$(api_check GET "/v1/github/$install/repositories" | unwrap_list | jq -r ".[] | select(.fullName==\"$repo\") | .id" | head -n 1)
     [ -z "$repo_id" ] && die "Repository not found: $repo"
     
     local payload=$(cat <<EOF
@@ -62,8 +83,10 @@ deploy_agent() {
 EOF
 )
     
-    local result=$(api POST "/v1/projects" "$payload")
-    local project_id=$(echo "$result" | jq -r '.id')
+    local result
+    result=$(api_check POST "/v1/projects" "$payload")
+    local project_id
+    project_id=$(echo "$result" | jq -r '.data.id // empty')
     
     success "Agent deployed! Project ID: $project_id"
     echo "URL: https://$name.createos.io"
@@ -77,10 +100,13 @@ deploy_mcp() {
     
     info "Creating MCP server project: $name"
     
-    local install=$(api GET "/v1/github/accounts" | jq -r '.[0].installationId')
+    local install
+    install=$(api_check GET "/v1/github/accounts" | jq -r '(.data[0].installationId // .[0].installationId // empty)')
     [ "$install" == "null" ] && die "No GitHub account connected"
+    [ -z "$install" ] && die "No GitHub account connected"
     
-    local repo_id=$(api GET "/v1/github/$install/repositories" | jq -r ".[] | select(.fullName==\"$repo\") | .id")
+    local repo_id
+    repo_id=$(api_check GET "/v1/github/$install/repositories" | unwrap_list | jq -r ".[] | select(.fullName==\"$repo\") | .id" | head -n 1)
     [ -z "$repo_id" ] && die "Repository not found: $repo"
     
     local payload=$(cat <<EOF
@@ -106,8 +132,10 @@ deploy_mcp() {
 EOF
 )
     
-    local result=$(api POST "/v1/projects" "$payload")
-    local project_id=$(echo "$result" | jq -r '.id')
+    local result
+    result=$(api_check POST "/v1/projects" "$payload")
+    local project_id
+    project_id=$(echo "$result" | jq -r '.data.id // empty')
     
     success "MCP Server deployed! Project ID: $project_id"
     echo "MCP Endpoint: https://$name.createos.io/sse"
@@ -121,8 +149,12 @@ deploy_api() {
     
     info "Creating API project: $name"
     
-    local install=$(api GET "/v1/github/accounts" | jq -r '.[0].installationId')
-    local repo_id=$(api GET "/v1/github/$install/repositories" | jq -r ".[] | select(.fullName==\"$repo\") | .id")
+    local install
+    install=$(api_check GET "/v1/github/accounts" | jq -r '(.data[0].installationId // .[0].installationId // empty)')
+    [ -z "$install" ] && die "No GitHub account connected"
+
+    local repo_id
+    repo_id=$(api_check GET "/v1/github/$install/repositories" | unwrap_list | jq -r ".[] | select(.fullName==\"$repo\") | .id" | head -n 1)
     
     local payload=$(cat <<EOF
 {
@@ -145,7 +177,8 @@ deploy_api() {
 EOF
 )
     
-    local result=$(api POST "/v1/projects" "$payload")
+    local result
+    result=$(api_check POST "/v1/projects" "$payload")
     success "API deployed! URL: https://$name.createos.io"
 }
 
@@ -171,12 +204,14 @@ deploy_bot() {
 EOF
 )
     
-    local result=$(api POST "/v1/projects" "$payload")
-    local project_id=$(echo "$result" | jq -r '.id')
+    local result
+    result=$(api_check POST "/v1/projects" "$payload")
+    local project_id
+    project_id=$(echo "$result" | jq -r '.data.id // empty')
     
     # Deploy image
     info "Deploying image: $image"
-    api POST "/v1/projects/$project_id/deployments" "{\"image\": \"$image\"}" > /dev/null
+    api_check POST "/v1/projects/$project_id/deployments" "{\"image\": \"$image\"}" > /dev/null
     
     success "Bot deployed! Project ID: $project_id"
 }
@@ -206,22 +241,51 @@ deploy_static() {
 EOF
 )
     
-    local result=$(api POST "/v1/projects" "$payload")
-    local project_id=$(echo "$result" | jq -r '.id')
+    local result
+    result=$(api_check POST "/v1/projects" "$payload")
+    local project_id
+    project_id=$(echo "$result" | jq -r '.data.id // empty')
     
-    # Upload files
+    # Upload files (base64 so binaries like images/fonts work)
     info "Uploading files from: $dir"
-    local temp_zip="/tmp/createos_static_$$.zip"
-    (cd "$dir" && zip -r "$temp_zip" .)
-    
-    curl -s -X POST \
-        -H "X-Api-Key: $API_KEY" \
-        -F "file=@$temp_zip" \
-        "${API_BASE}/v1/projects/$project_id/deployments/zip" > /dev/null
-    
-    rm -f "$temp_zip"
-    
-    success "Static site deployed! URL: https://$name.createos.io"
+    payload=$(python3 - "$dir" <<'PY'
+import base64
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+IGNORE_DIRS = {'.git', 'node_modules', '.next', '.turbo', '.cache', '__pycache__', '.venv', '.agents', '.claude'}
+IGNORE_FILES = {'.DS_Store'}
+
+files = []
+for fp in root.rglob('*'):
+    if fp.is_dir():
+        continue
+    rel = fp.relative_to(root)
+    if any(part in IGNORE_DIRS for part in rel.parts):
+        continue
+    if fp.name in IGNORE_FILES:
+        continue
+    files.append({'path': rel.as_posix(), 'content': base64.b64encode(fp.read_bytes()).decode('ascii')})
+
+if len(files) > 100:
+    raise SystemExit(f"Too many files ({len(files)}). CreateOS upload endpoints accept max 100 files per request.")
+
+print(json.dumps({'files': files}))
+PY
+)
+
+    api_check PUT "/v1/projects/$project_id/deployments/files/base64" "$payload" > /dev/null
+
+    # Best-effort: print the deployment endpoint URL.
+    dep=$(api_check GET "/v1/projects/$project_id/deployments?limit=1" | jq -r '.data.data[0].extra.endpoint // empty')
+    if [ -n "$dep" ]; then
+        success "Static site deployed! URL: $dep"
+    else
+        success "Static site deployed!"
+        echo "Project: $project_id"
+    fi
 }
 
 # Main

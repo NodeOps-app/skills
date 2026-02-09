@@ -18,6 +18,16 @@ X-Api-Key: <your-api-key>
 
 Obtain API keys via `POST /v1/api-keys` or the CreateOS dashboard.
 
+## Response Envelope
+
+Most CreateOS REST endpoints respond with an envelope:
+
+```json
+{"status":"success","data":{...}}
+```
+
+Some application-level failures may return HTTP 200 with `{"status":"fail", ...}`. Always check the `status` field.
+
 ---
 
 ## Projects
@@ -175,7 +185,7 @@ For image/upload projects:
 
 ### Upload Files (Upload Projects)
 
-`POST /v1/projects/{project_id}/deployments/files`
+`PUT /v1/projects/{project_id}/deployments/files`
 
 **Request Body:**
 
@@ -194,7 +204,7 @@ For image/upload projects:
 
 ### Upload Base64 Files
 
-`POST /v1/projects/{project_id}/deployments/files/base64`
+`PUT /v1/projects/{project_id}/deployments/files/base64`
 
 **Request Body:**
 
@@ -215,6 +225,8 @@ For image/upload projects:
 **Content-Type:** `multipart/form-data`
 
 **Form Field:** `file` - ZIP file binary
+
+**Important:** This ZIP endpoint is not consistently enabled across CreateOS environments. Prefer `PUT /deployments/files` (text) or `PUT /deployments/files/base64` (binary-safe).
 
 ---
 
@@ -351,9 +363,9 @@ For image/upload projects:
 
 ### Update Environment
 
-`PATCH /v1/projects/{project_id}/environments/{environment_id}`
+`PUT /v1/projects/{project_id}/environments/{environment_id}`
 
-**Request Body:**
+**Request Body:** Full environment object update (commonly includes `resources` and `settings.runEnvs`).
 
 ```json
 {
@@ -698,6 +710,8 @@ For image/upload projects:
 
 `GET /v1/user`
 
+**Note:** This endpoint may be disabled in some CreateOS environments.
+
 ---
 
 ### Get Quotas
@@ -709,6 +723,8 @@ For image/upload projects:
 ### Get Supported Types
 
 `GET /v1/supported-types`
+
+**Note:** This endpoint may be disabled in some CreateOS environments.
 
 ---
 
@@ -752,3 +768,4 @@ X-RateLimit-Limit: 100
 X-RateLimit-Remaining: 95
 X-RateLimit-Reset: 1704070800
 ```
+**Important:** Some CreateOS deployments do not expose an `.../assign` endpoint. In those cases, assignment is performed (best-effort) by updating the environment via `PUT /environments/{environment_id}` with a deployment pointer field (API variants use `deploymentId` or `projectDeploymentId`).

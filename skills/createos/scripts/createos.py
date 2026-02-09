@@ -52,8 +52,13 @@ class CreateOS:
             "Content-Type": "application/json"
         })
     
-    def _request(self, method: str, endpoint: str, **kwargs) -> Dict[str, Any]:
-        """Make API request"""
+    def _request(self, method: str, endpoint: str, **kwargs) -> Any:
+        """Make API request.
+
+        Notes:
+        - Many CreateOS REST endpoints wrap payloads as: {"status": "success"|"fail", "data": ...}
+        - Some failures are returned with HTTP 200 but status=fail.
+        """
         url = f"{self.base_url}{endpoint}"
         response = self.session.request(method, url, **kwargs)
         
@@ -62,13 +67,29 @@ class CreateOS:
         except json.JSONDecodeError:
             data = {"raw": response.text}
         
+        # HTTP-level errors
         if not response.ok:
             raise CreateOSError(
                 f"API error: {response.status_code}",
                 status_code=response.status_code,
-                response=data
+                response=data,
             )
-        
+
+        # Application-level errors (often returned as HTTP 200)
+        if isinstance(data, dict) and data.get("status") == "fail":
+            msg = data.get("data")
+            if isinstance(msg, (dict, list)):
+                msg = json.dumps(msg)
+            raise CreateOSError(
+                str(msg or "CreateOS API returned status=fail"),
+                status_code=response.status_code,
+                response=data,
+            )
+
+        # Unwrap {status,data} by default
+        if isinstance(data, dict) and "data" in data and "status" in data:
+            return data["data"]
+
         return data
     
     # ==================== Projects ====================
@@ -205,34 +226,72 @@ class CreateOS:
         payload = {
             "files": [{"path": path, "content": content} for path, content in files.items()]
         }
-        return self._request("POST", f"/v1/projects/{project_id}/deployments/files", json=payload)
+        return self._request("PUT", f"/v1/projects/{project_id}/deployments/files", json=payload)
+
+    def upload_base64_files(self, project_id: str, files: Dict[str, bytes]) -> Dict[str, Any]:
+        """Upload base64-encoded files to deploy (supports binaries)."""
+        payload = {
+            "files": [
+                {"path": path, "content": base64.b64encode(content).decode("ascii")}
+                for path, content in files.items()
+            ]
+        }
+        return self._request("PUT", f"/v1/projects/{project_id}/deployments/files/base64", json=payload)
     
     def upload_directory(self, project_id: str, directory: str) -> Dict[str, Any]:
-        """Upload a directory as zip"""
+        """Upload a directory (base64 endpoint).
+
+        This is the most reliable upload method across CreateOS API variants.
+        """
         directory_path = Path(directory)
         if not directory_path.is_dir():
             raise CreateOSError(f"Not a directory: {directory_path}")
-        
-        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
-            with zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED) as zf:
-                for file in directory_path.rglob("*"):
-                    if file.is_file():
-                        zf.write(file, file.relative_to(directory_path))
-            
-            return self.upload_zip(project_id, tmp.name)
+
+        ignore_dirs = {
+            ".git",
+            "node_modules",
+            ".next",
+            ".turbo",
+            ".cache",
+            "__pycache__",
+            ".venv",
+            ".agents",
+            ".claude",
+        }
+        ignore_files = {".DS_Store"}
+
+        files: Dict[str, bytes] = {}
+        for file in directory_path.rglob("*"):
+            if not file.is_file():
+                continue
+            rel = file.relative_to(directory_path)
+            if any(part in ignore_dirs for part in rel.parts):
+                continue
+            if file.name in ignore_files:
+                continue
+            files[rel.as_posix()] = file.read_bytes()
+
+        if len(files) > 100:
+            raise CreateOSError(
+                f"Too many files ({len(files)}). Upload endpoints accept max 100 files per request."
+            )
+
+        return self.upload_base64_files(project_id, files)
     
     def upload_zip(self, project_id: str, zip_path: str) -> Dict[str, Any]:
-        """Upload a zip file"""
-        # Remove Content-Type for multipart
-        headers = {"X-Api-Key": self.api_key}
-        with open(zip_path, "rb") as f:
-            files = {"file": f}
-            response = requests.post(
-                f"{self.base_url}/v1/projects/{project_id}/deployments/zip",
-                headers=headers,
-                files=files
-            )
-        return response.json()
+        """Upload a zip file by expanding and uploading contents.
+
+        The public REST endpoint /deployments/zip is not consistently enabled across
+        CreateOS environments. This implementation stays portable.
+        """
+        zip_file = Path(zip_path)
+        if not zip_file.is_file():
+            raise CreateOSError(f"Not a file: {zip_file}")
+
+        with tempfile.TemporaryDirectory(prefix="createos_zip_") as tmpdir:
+            with zipfile.ZipFile(zip_file, "r") as zf:
+                zf.extractall(tmpdir)
+            return self.upload_directory(project_id, tmpdir)
     
     def list_deployments(self, project_id: str, limit: int = 10, offset: int = 0) -> Dict[str, Any]:
         """List deployments"""
@@ -480,10 +539,15 @@ def main():
     elif args.command == "deploy":
         result = client.trigger_deployment(args.project_id, args.branch)
     elif args.command == "upload":
-        if Path(args.path).is_dir():
-            result = client.upload_directory(args.project_id, args.path)
+        p = Path(args.path)
+        if p.is_dir():
+            result = client.upload_directory(args.project_id, str(p))
+        elif p.is_file() and p.suffix.lower() == ".zip":
+            result = client.upload_zip(args.project_id, str(p))
+        elif p.is_file():
+            result = client.upload_base64_files(args.project_id, {p.name: p.read_bytes()})
         else:
-            result = client.upload_zip(args.project_id, args.path)
+            raise CreateOSError(f"Path not found: {p}")
     elif args.command == "status":
         if args.deployment_id:
             result = client.get_deployment(args.project_id, args.deployment_id)
