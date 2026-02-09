@@ -1,0 +1,10 @@
+{
+  "name": "@nodeops/skills",
+  "private": true,
+  "description": "NodeOps agent skills collection",
+  "keywords": ["agent-skills", "createos", "nodeops"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NodeOps-app/skills"
+  }
+}

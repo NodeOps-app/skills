@@ -1,0 +1,69 @@
+# OS junk
+.DS_Store
+Thumbs.db
+._*
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Env / secrets
+.env
+.env.*
+
+# Dependency dirs
+node_modules/
+
+# JS/TS build output and caches
+dist/
+build/
+out/
+coverage/
+.nyc_output/
+.next/
+.nuxt/
+.turbo/
+.cache/
+.parcel-cache/
+.eslintcache
+
+# Python bytecode / venvs / tooling
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.venv/
+venv/
+env/
+pip-wheel-metadata/
+*.egg-info/
+
+# Go build artifacts
+bin/
+*.test
+*.out
+coverage.out
+
+# Rust build artifacts
+target/
+
+# Terraform (if present)
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# IDEs
+.idea/
+.vscode/
+
+# Agent / local tooling
+.agents/
+.claude/
+.claude_consciousness.m8
+.opencode/
