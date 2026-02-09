@@ -8,6 +8,21 @@ AI agent skills for the [NodeOps](https://nodeops.network) ecosystem. Works with
 |-------|-------------|---------|
 | **createos** | Deploy anything to production on CreateOS cloud platform | `npx skills add https://github.com/NodeOps-app/skills --skill createos` |
 
+## CreateOS Authentication
+
+The `createos` skill can be used in two modes:
+
+- MCP mode (preferred when available): authentication is handled by the MCP server (no API key needed).
+- REST/script mode: you must provide an API key via `CREATEOS_API_KEY`.
+
+For REST/script usage:
+
+```bash
+export CREATEOS_API_KEY="<your-createos-api-key>"
+```
+
+Never commit API keys to git; prefer setting them in your shell or your agent environment.
+
 ## Installation
 
 Install a specific skill:
