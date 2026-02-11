@@ -128,7 +128,7 @@ app.get("/mcp", async (req, res) => {
 app.listen(3000);
 ```
 
-**MCP Endpoint:** `https://{uniqueName}.createos.io/mcp`
+**MCP Endpoint:** Fetch project URL from `GetProject(project_id)` response, then append `/mcp` (e.g., if `url` is `https://mcp-server.nodeops.app`, MCP endpoint is `https://mcp-server.nodeops.app/mcp`)
 
 ---
 
@@ -341,7 +341,7 @@ app.listen(3000);
     "runCommand": "python bot.py",
     "runEnvs": {
       "TELEGRAM_TOKEN": "${TELEGRAM_TOKEN}",
-      "WEBHOOK_URL": "https://telegram-bot.createos.io/webhook"
+      "WEBHOOK_URL": "${DEPLOYMENT_URL}/webhook"  // Set after deployment - get URL from GetProject response
     }
   }
 }

@@ -92,8 +92,11 @@ For image/upload projects:
   "type": "vcs",
   "status": "active",
   "createdAt": "2025-01-15T10:30:00Z",
-  "url": "https://my-app.createos.io"
+  "url": "https://my-app.nodeops.app"
 }
+```
+
+**Note:** Always use the `url` field from the response. Never construct URLs manually - the domain may vary.
 ```
 
 ---
@@ -256,8 +259,10 @@ For image/upload projects:
   "image": "nginx:latest",
   "createdAt": "2025-01-15T10:30:00Z",
   "deployedAt": "2025-01-15T10:35:00Z",
-  "url": "https://deployment-hash.createos.io"
+  "url": "https://my-app.nodeops.app"
 }
+
+**Important:** The `url` field contains the actual live URL. Always share this exact URL with users - never construct URLs manually.
 ```
 
 **Deployment Statuses:** `queued`, `building`, `deploying`, `deployed`, `failed`, `sleeping`
