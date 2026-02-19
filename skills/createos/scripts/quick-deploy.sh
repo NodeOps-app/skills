@@ -86,12 +86,10 @@ EOF
     local result
     result=$(api_check POST "/v1/projects" "$payload")
     local project_id
-    project_id=$(echo "$result" | jq -r '.data.id // .id // empty')
-    local project_url
-    project_url=$(echo "$result" | jq -r '.data.url // .url // empty')
-
+    project_id=$(echo "$result" | jq -r '.data.id // empty')
+    
     success "Agent deployed! Project ID: $project_id"
-    [ -n "$project_url" ] && echo "URL: $project_url" || echo "URL: Fetch via GetProject($project_id)"
+    echo "URL: https://$name.createos.io"
 }
 
 # Deploy MCP Server
@@ -137,12 +135,10 @@ EOF
     local result
     result=$(api_check POST "/v1/projects" "$payload")
     local project_id
-    project_id=$(echo "$result" | jq -r '.data.id // .id // empty')
-    local project_url
-    project_url=$(echo "$result" | jq -r '.data.url // .url // empty')
-
+    project_id=$(echo "$result" | jq -r '.data.id // empty')
+    
     success "MCP Server deployed! Project ID: $project_id"
-    [ -n "$project_url" ] && echo "MCP Endpoint: ${project_url}/sse" || echo "MCP Endpoint: Fetch via GetProject($project_id), append /sse"
+    echo "MCP Endpoint: https://$name.createos.io/sse"
 }
 
 # Deploy FastAPI Service
@@ -183,13 +179,7 @@ EOF
     
     local result
     result=$(api_check POST "/v1/projects" "$payload")
-    local project_id
-    project_id=$(echo "$result" | jq -r '.data.id // .id // empty')
-    local project_url
-    project_url=$(echo "$result" | jq -r '.data.url // .url // empty')
-
-    success "API deployed! Project ID: $project_id"
-    [ -n "$project_url" ] && echo "URL: $project_url" || echo "URL: Fetch via GetProject($project_id)"
+    success "API deployed! URL: https://$name.createos.io"
 }
 
 # Deploy Bot (Docker image)
