@@ -2,6 +2,8 @@
 
 AI agent skills for the [NodeOps](https://nodeops.network) ecosystem. Works with Claude Code, Cursor, Windsurf, and 40+ other AI coding agents via the [skills](https://skills.sh) CLI.
 
+[![CreateOS MCP server](https://glama.ai/mcp/servers/NodeOps-app/skills/badges/card.svg)](https://glama.ai/mcp/servers/NodeOps-app/skills)
+
 ## Available Skills
 
 | Skill | Description | Install |
