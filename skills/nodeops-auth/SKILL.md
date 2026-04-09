@@ -18,7 +18,7 @@ Before starting, verify the project is compatible:
 
 Before each step, check if the work is already done. Skip steps that are already complete:
 - If `@nodeops-createos/integration-oauth` is already in `package.json` dependencies, skip install.
-- If `app/api/auth/[...nodeops]/route.ts` (or `.js`) already exists, skip route creation.
+- If `app/api/auth/me/route.ts` and `app/api/auth/token/route.ts` already exist, skip route creation.
 - If `AuthProvider` from `@nodeops-createos/integration-oauth` is already imported in the layout, skip wrapping.
 - If `app/callback/page.tsx` (or `.jsx`) already exists, skip callback page creation.
 - If `.env.example` already exists and contains `NODEOPS_`, skip env file creation.
@@ -37,9 +37,16 @@ Before each step, check if the work is already done. Skip steps that are already
    - yarn: `yarn add @nodeops-createos/integration-oauth`
    - **If install fails**: check if the user has network access and the registry is reachable. Suggest running the command manually if it keeps failing.
 
-3. **Create the catch-all API route** — create `app/api/auth/[...nodeops]/route.ts` (or `.js`), creating directories as needed:
+3. **Create the API routes** — create two separate route files, creating directories as needed:
+
+   `app/api/auth/me/route.ts` (or `.js`):
    ```ts
-   export { GET, POST } from '@nodeops-createos/integration-oauth/server';
+   export { GET } from '@nodeops-createos/integration-oauth/server/me';
+   ```
+
+   `app/api/auth/token/route.ts` (or `.js`):
+   ```ts
+   export { POST } from '@nodeops-createos/integration-oauth/server/token';
    ```
 
 4. **Wrap layout with AuthProvider** — read the root layout file. It could be `app/layout.tsx`, `app/layout.jsx`, `app/layout.js`, or `app/layout.ts`. Find whichever exists.
