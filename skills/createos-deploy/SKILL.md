@@ -1,5 +1,5 @@
 ---
-name: createos-skill
+name: createos-deploy
 description: Deploy projects to CreateOS infrastructure via the MPP Gateway. Use when the user wants to deploy code, ship an app, or deploy to CreateOS. No auth session or OAuth required — uses HTTP 402 payment flow only.
 argument-hint: "[service] [plan]"
 ---
