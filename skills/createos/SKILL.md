@@ -57,7 +57,7 @@ UploadDeploymentFiles(project_id, {
   ]
 })
 
-// Result: https://my-app.createos.io is live!
+// Result: https://my-app.createos.nodeops.network is live!
 ```
 
 ### Deploy from GitHub (Auto-deploy on push)
@@ -975,7 +975,7 @@ CreateProject({
 })
 ```
 
-**MCP Endpoint**: `https://{uniqueName}.createos.io/mcp`
+**MCP Endpoint**: `https://{uniqueName}.createos.nodeops.network/mcp`
 
 ### Pattern: RAG Pipeline
 
@@ -1047,8 +1047,8 @@ CreateProject({
   "appId": app_id,
   "settings": {
     "runEnvs": {
-      "WORKER_RESEARCHER_URL": "https://researcher.createos.io",
-      "WORKER_EXECUTOR_URL": "https://executor.createos.io"
+      "WORKER_RESEARCHER_URL": "https://researcher.createos.nodeops.network",
+      "WORKER_EXECUTOR_URL": "https://executor.createos.nodeops.network"
     }
   }
 })
@@ -1227,6 +1227,17 @@ CheckAPIKeyUniqueName | GetCurrentUser | GetQuotas | GetSupportedProjectTypes
 | Environment displayName | 4 | 48 | `^[a-zA-Z0-9 _-]+$` |
 | API key name | 4 | 48 | `^[a-zA-Z0-9-]+$` |
 | Domain name | 3 | 255 | Valid domain |
+
+---
+
+## See also
+
+If the user is moving an existing project off another cloud platform rather than starting fresh, prefer a migration-family skill over the general `createos` flow:
+
+- **`vercel-to-createos`** — live today. Use when the repo contains `vercel.json`, `.vercel/`, or `@vercel/*` dependencies, or when the user mentions migrating from Vercel.
+- `netlify-to-createos`, `railway-to-createos`, `heroku-to-createos`, `render-to-createos`, `flyio-to-createos` — reserved stubs. Until they ship, route the user to concierge migration at `mailto:business@nodeops.xyz`.
+
+See [MIGRATIONS.md](../../MIGRATIONS.md) at the repo root for the full migration skill index.
 
 ---
 
