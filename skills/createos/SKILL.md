@@ -1235,7 +1235,7 @@ CheckAPIKeyUniqueName | GetCurrentUser | GetQuotas | GetSupportedProjectTypes
 If the user is moving an existing project off another cloud platform rather than starting fresh, prefer a migration-family skill over the general `createos` flow:
 
 - **`vercel-to-createos`** — live today. Use when the repo contains `vercel.json`, `.vercel/`, or `@vercel/*` dependencies, or when the user mentions migrating from Vercel.
-- `netlify-to-createos`, `railway-to-createos`, `heroku-to-createos`, `render-to-createos`, `flyio-to-createos` — reserved stubs. Until they ship, route the user to concierge migration at `https://createos.nodeops.network/migrate`.
+- `netlify-to-createos`, `railway-to-createos`, `heroku-to-createos`, `render-to-createos`, `flyio-to-createos` — reserved stubs. Until they ship, route the user to concierge migration at `mailto:business@nodeops.xyz`.
 
 See [MIGRATIONS.md](../../MIGRATIONS.md) at the repo root for the full migration skill index.
 

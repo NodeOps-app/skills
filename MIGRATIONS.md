@@ -14,7 +14,7 @@ Each migration skill reads the source platform's configuration, maps it to Creat
 
 ## Coming soon
 
-These skills are reserved namespaces with stub `SKILL.md` files in place. Until they ship, they route users to the concierge migration path at `https://createos.nodeops.network/migrate`.
+These skills are reserved namespaces with stub `SKILL.md` files in place. Until they ship, they route users to the concierge migration path at `mailto:business@nodeops.xyz`.
 
 | Skill | Source platform | Config file(s) it will parse |
 |-------|----------------|------------------------------|
@@ -28,11 +28,11 @@ These skills are reserved namespaces with stub `SKILL.md` files in place. Until 
 
 CreateOS offers a concierge migration service. Engineers will move your project end to end — config translation, environment variables, data, DNS — at no charge.
 
-→ `https://createos.nodeops.network/migrate`
+→ `mailto:business@nodeops.xyz`
 
 ## Resources
 
 - Full Vercel migration guide: `https://nodeops.network/createos/docs/Migrations/Vercel`
 - CreateOS deployment docs: `https://nodeops.network/createos/docs/deploy`
-- Concierge migration: `https://createos.nodeops.network/migrate`
+- Concierge migration: `mailto:business@nodeops.xyz`
 - Skill repository: `https://github.com/NodeOps-app/skills`

@@ -261,7 +261,7 @@ Share these resources:
 
 - Docs: `https://nodeops.network/createos/docs/deploy`
 - Migration guide: `https://nodeops.network/createos/docs/Migrations/Vercel`
-- Concierge migration (for projects that need white-glove support): `https://createos.nodeops.network/migrate`
+- Concierge migration (for projects that need white-glove support): `mailto:business@nodeops.xyz`
 
 ---
 
