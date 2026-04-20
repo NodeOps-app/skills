@@ -92,7 +92,7 @@ For image/upload projects:
   "type": "vcs",
   "status": "active",
   "createdAt": "2025-01-15T10:30:00Z",
-  "url": "https://my-app.createos.io"
+  "url": "https://my-app.createos.nodeops.network"
 }
 ```
 
@@ -256,7 +256,7 @@ For image/upload projects:
   "image": "nginx:latest",
   "createdAt": "2025-01-15T10:30:00Z",
   "deployedAt": "2025-01-15T10:35:00Z",
-  "url": "https://deployment-hash.createos.io"
+  "url": "https://deployment-hash.createos.nodeops.network"
 }
 ```
 
