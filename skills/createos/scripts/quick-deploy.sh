@@ -138,7 +138,7 @@ EOF
     project_id=$(echo "$result" | jq -r '.data.id // empty')
     
     success "MCP Server deployed! Project ID: $project_id"
-    echo "MCP Endpoint: https://$name.createos.nodeops.network/sse"
+    echo "MCP Endpoint: https://$name.createos.nodeops.network/mcp"
 }
 
 # Deploy FastAPI Service
