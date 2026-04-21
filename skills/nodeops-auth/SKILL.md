@@ -103,7 +103,33 @@ Before each step, check if the work is already done. Skip steps that are already
    .env.local
    ```
 
-9. **Show a summary** — print a clear summary:
+9. **Docker / container deployment** — if the project has a `Dockerfile`, or the user mentions Docker, containers, or a platform like CreateOS:
+
+   > **Key concept**: `NEXT_PUBLIC_*` vars are baked into the JS bundle at `npm run build` time. They must be set as `ENV` in the Dockerfile *before* the `RUN npm run build` line. Server-side vars (`NODEOPS_TOKEN_URL`, etc.) are read at runtime and can be injected via `docker run -e` or compose, but setting them at build time too is simplest.
+
+   - Add these lines to the Dockerfile **before** `RUN npm run build`:
+     ```dockerfile
+     # ── Build-time env (baked into the JS bundle) ─────────────────────────
+     ENV NEXT_PUBLIC_NODEOPS_AUTH_URL=https://id.nodeops.network/oauth2/auth
+     ENV NEXT_PUBLIC_NODEOPS_CLIENT_ID=your_client_id_here
+     ENV NEXT_PUBLIC_NODEOPS_REDIRECT_URI=https://your-production-url.com/callback
+     ENV NEXT_PUBLIC_NODEOPS_SCOPES=offline_access offline openid
+
+     # ── Runtime env (read by API routes on each request) ──────────────────
+     ENV NODEOPS_CLIENT_SECRET=your_client_secret_here
+     ENV NODEOPS_TOKEN_URL=https://id.nodeops.network/oauth2/token
+     ENV NODEOPS_USERINFO_URL=https://autogen-v2-api.nodeops.network/v1/users/me
+     ```
+   - Make sure `.env.local` is in `.dockerignore` so secrets from local dev are never copied into the image.
+   - If `.dockerignore` doesn't exist, create one with at least:
+     ```
+     .env
+     .env.local
+     node_modules
+     ```
+   - Remind the user: for production, replace the placeholder values in the Dockerfile (or use build args / CI secrets) with real credentials. `NEXT_PUBLIC_NODEOPS_REDIRECT_URI` must point to the deployed URL, not localhost.
+
+10. **Show a summary** — print a clear summary:
    - Files created/modified (list each one)
    - Files skipped (if any were already present)
    - Remind user to fill in the 2 required env vars: `NEXT_PUBLIC_NODEOPS_CLIENT_ID` and `NODEOPS_CLIENT_SECRET`
