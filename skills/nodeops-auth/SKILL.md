@@ -103,14 +103,81 @@ Before each step, check if the work is already done. Skip steps that are already
    .env.local
    ```
 
-9. **Show a summary** — print a clear summary:
-   - Files created/modified (list each one)
-   - Files skipped (if any were already present)
-   - Remind user to fill in the 2 required env vars: `NEXT_PUBLIC_NODEOPS_CLIENT_ID` and `NODEOPS_CLIENT_SECRET`
-   - Show how to use the hooks in any page:
-     ```tsx
-     import { useAuth, useUser } from '@nodeops-createos/integration-oauth';
+9. **Docker/container deployment** — check if a `Dockerfile` exists in the project root. If it does, verify it handles NodeOps env vars correctly and warn the user if not. If the user asks about Docker or deployment, create or update the Dockerfile.
 
-     const { isAuthenticated, login, logout, loading, authError } = useAuth();
-     const { user } = useUser();
-     ```
+   **Critical**: `NEXT_PUBLIC_*` vars are baked into the JS bundle at **build time** by Next.js. They must be set as `ENV` or `ARG` in the Dockerfile **before** `RUN npm run build`. Setting them only at runtime does nothing — the bundle will contain `undefined`.
+
+   The two categories of vars:
+
+   | Variable | When needed | Why |
+   |---|---|---|
+   | `NEXT_PUBLIC_NODEOPS_AUTH_URL` | Build time | Inlined into client JS bundle |
+   | `NEXT_PUBLIC_NODEOPS_CLIENT_ID` | Build time | Inlined into client JS bundle |
+   | `NEXT_PUBLIC_NODEOPS_REDIRECT_URI` | Build time | Inlined into client JS bundle |
+   | `NEXT_PUBLIC_NODEOPS_SCOPES` | Build time | Inlined into client JS bundle |
+   | `NODEOPS_CLIENT_SECRET` | Runtime only | Read by API route on each request |
+   | `NODEOPS_TOKEN_URL` | Runtime only | Read by API route on each request |
+   | `NODEOPS_USERINFO_URL` | Runtime only | Read by API route on each request |
+
+   Example Dockerfile snippet — `NEXT_PUBLIC_*` vars set **before** the build step:
+   ```dockerfile
+   # ── Build stage ──
+   FROM node:20-alpine AS builder
+   WORKDIR /app
+   COPY package*.json ./
+   RUN npm ci
+
+   COPY . .
+
+   # NEXT_PUBLIC_* must be present at build time — they get baked into the JS bundle
+   ARG NEXT_PUBLIC_NODEOPS_AUTH_URL=https://id.nodeops.network/oauth2/auth
+   ARG NEXT_PUBLIC_NODEOPS_CLIENT_ID
+   ARG NEXT_PUBLIC_NODEOPS_REDIRECT_URI
+   ARG NEXT_PUBLIC_NODEOPS_SCOPES=offline_access offline openid
+
+   ENV NEXT_PUBLIC_NODEOPS_AUTH_URL=$NEXT_PUBLIC_NODEOPS_AUTH_URL
+   ENV NEXT_PUBLIC_NODEOPS_CLIENT_ID=$NEXT_PUBLIC_NODEOPS_CLIENT_ID
+   ENV NEXT_PUBLIC_NODEOPS_REDIRECT_URI=$NEXT_PUBLIC_NODEOPS_REDIRECT_URI
+   ENV NEXT_PUBLIC_NODEOPS_SCOPES=$NEXT_PUBLIC_NODEOPS_SCOPES
+
+   RUN npm run build
+
+   # ── Runtime stage ──
+   FROM node:20-alpine AS runner
+   WORKDIR /app
+   COPY --from=builder /app/.next ./.next
+   COPY --from=builder /app/public ./public
+   COPY --from=builder /app/package*.json ./
+   COPY --from=builder /app/node_modules ./node_modules
+
+   # Server-side vars — only needed at runtime, read per-request by API routes
+   ENV NODEOPS_CLIENT_SECRET=""
+   ENV NODEOPS_TOKEN_URL=https://id.nodeops.network/oauth2/token
+   ENV NODEOPS_USERINFO_URL=https://autogen-v2-api.nodeops.network/v1/users/me
+
+   EXPOSE 3000
+   CMD ["npm", "start"]
+   ```
+
+   Also ensure `.dockerignore` excludes `.env.local`:
+   ```
+   .env
+   .env.local
+   node_modules
+   .next
+   ```
+
+   **If the project deploys to Vercel or similar**: no Dockerfile is needed — those platforms inject env vars before building automatically. Just remind the user to add the vars in their platform's dashboard.
+
+10. **Show a summary** — print a clear summary:
+    - Files created/modified (list each one)
+    - Files skipped (if any were already present)
+    - Remind user to fill in the 2 required env vars: `NEXT_PUBLIC_NODEOPS_CLIENT_ID` and `NODEOPS_CLIENT_SECRET`
+    - If a Dockerfile exists, remind that `NEXT_PUBLIC_*` vars must be set before `npm run build` in the Dockerfile
+    - Show how to use the hooks in any page:
+      ```tsx
+      import { useAuth, useUser } from '@nodeops-createos/integration-oauth';
+
+      const { isAuthenticated, login, logout, loading, authError } = useAuth();
+      const { user } = useUser();
+      ```
