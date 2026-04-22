@@ -128,7 +128,7 @@ app.get("/mcp", async (req, res) => {
 app.listen(3000);
 ```
 
-**MCP Endpoint:** `https://{uniqueName}.createos.io/mcp`
+**MCP Endpoint:** `https://{uniqueName}.createos.nodeops.network/mcp`
 
 ---
 
@@ -341,7 +341,7 @@ app.listen(3000);
     "runCommand": "python bot.py",
     "runEnvs": {
       "TELEGRAM_TOKEN": "${TELEGRAM_TOKEN}",
-      "WEBHOOK_URL": "https://telegram-bot.createos.io/webhook"
+      "WEBHOOK_URL": "https://telegram-bot.createos.nodeops.network/webhook"
     }
   }
 }

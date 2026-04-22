@@ -89,7 +89,7 @@ EOF
     project_id=$(echo "$result" | jq -r '.data.id // empty')
     
     success "Agent deployed! Project ID: $project_id"
-    echo "URL: https://$name.createos.io"
+    echo "URL: https://$name.createos.nodeops.network"
 }
 
 # Deploy MCP Server
@@ -138,7 +138,7 @@ EOF
     project_id=$(echo "$result" | jq -r '.data.id // empty')
     
     success "MCP Server deployed! Project ID: $project_id"
-    echo "MCP Endpoint: https://$name.createos.io/sse"
+    echo "MCP Endpoint: https://$name.createos.nodeops.network/mcp"
 }
 
 # Deploy FastAPI Service
@@ -179,7 +179,7 @@ EOF
     
     local result
     result=$(api_check POST "/v1/projects" "$payload")
-    success "API deployed! URL: https://$name.createos.io"
+    success "API deployed! URL: https://$name.createos.nodeops.network"
 }
 
 # Deploy Bot (Docker image)
