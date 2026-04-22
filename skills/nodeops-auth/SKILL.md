@@ -169,7 +169,79 @@ Before each step, check if the work is already done. Skip steps that are already
 
    **If the project deploys to Vercel or similar**: no Dockerfile is needed — those platforms inject env vars before building automatically. Just remind the user to add the vars in their platform's dashboard.
 
-10. **Show a summary** — print a clear summary:
+   > **CreateOS note:** CreateOS does NOT use the Dockerfile for builds. It runs `npm ci && npm run build` directly, then injects env vars at container start. `NEXT_PUBLIC_*` vars will be empty at build time. See the CreateOS section below for the runtime config workaround.
+
+10. **CreateOS / build-then-inject platforms** — if the user is deploying to CreateOS or any platform that runs `npm run build` before injecting env vars, the Dockerfile ARG/ENV approach will NOT work. `NEXT_PUBLIC_*` vars will be `undefined` at build time.
+
+    ### What the package handles automatically (v1.x+)
+
+    `AuthProvider` from `@nodeops-createos/integration-oauth` v1.x+ auto-fetches `/api/config` at runtime if `NEXT_PUBLIC_*` vars are missing from the bundle. No extra setup is needed — just make sure the API route exists (step 10a below).
+
+    ### If using an older package version, add manually:
+
+    **10a.** Create `app/api/config/route.ts` (or `.js`):
+    ```ts
+    import { NextResponse } from 'next/server';
+
+    export const dynamic = 'force-dynamic';
+
+    export async function GET() {
+      return NextResponse.json({
+        NEXT_PUBLIC_NODEOPS_AUTH_URL:     process.env.NEXT_PUBLIC_NODEOPS_AUTH_URL     || 'https://id.nodeops.network/oauth2/auth',
+        NEXT_PUBLIC_NODEOPS_CLIENT_ID:    process.env.NEXT_PUBLIC_NODEOPS_CLIENT_ID    || '',
+        NEXT_PUBLIC_NODEOPS_REDIRECT_URI: process.env.NEXT_PUBLIC_NODEOPS_REDIRECT_URI || '',
+        NEXT_PUBLIC_NODEOPS_SCOPES:       process.env.NEXT_PUBLIC_NODEOPS_SCOPES       || 'offline_access offline openid',
+      });
+    }
+    ```
+
+    This route reads `NEXT_PUBLIC_*` vars from the server environment at runtime (where they ARE available) and exposes them to the client via a JSON endpoint.
+
+    **10b.** Create `components/EnvBootstrap.tsx` (or `.jsx`):
+    ```tsx
+    "use client";
+    import { useEffect, useState } from "react";
+
+    export default function EnvBootstrap({ children }: { children: React.ReactNode }) {
+      const [ready, setReady] = useState(
+        // If vars are already baked in (e.g. local dev), skip the fetch
+        typeof window !== "undefined" && !!process.env.NEXT_PUBLIC_NODEOPS_CLIENT_ID
+      );
+
+      useEffect(() => {
+        if (ready) return;
+        fetch("/api/config")
+          .then((r) => r.json())
+          .then((env) => {
+            // Patch process.env so AuthProvider picks them up
+            Object.assign(process.env, env);
+            setReady(true);
+          })
+          .catch((err) => {
+            console.error("Failed to load runtime config:", err);
+            setReady(true); // render anyway so error states show
+          });
+      }, [ready]);
+
+      if (!ready) return null;
+      return <>{children}</>;
+    }
+    ```
+
+    **10c.** Update the root layout to wrap `AuthProvider` with `EnvBootstrap`:
+    ```tsx
+    import { AuthProvider } from '@nodeops-createos/integration-oauth';
+    import EnvBootstrap from '@/components/EnvBootstrap';
+
+    // inside <body>:
+    <EnvBootstrap>
+      <AuthProvider>{children}</AuthProvider>
+    </EnvBootstrap>
+    ```
+
+    This ensures env vars are fetched from the server and patched into `process.env` before `AuthProvider` initializes on the client.
+
+11. **Show a summary** — print a clear summary:
     - Files created/modified (list each one)
     - Files skipped (if any were already present)
     - Remind user to fill in the 2 required env vars: `NEXT_PUBLIC_NODEOPS_CLIENT_ID` and `NODEOPS_CLIENT_SECRET`
