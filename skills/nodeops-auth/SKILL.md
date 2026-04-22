@@ -119,10 +119,11 @@ Before each step, check if the work is already done. Skip steps that are already
    | `NODEOPS_TOKEN_URL` | Runtime only | Read by API route on each request |
    | `NODEOPS_USERINFO_URL` | Runtime only | Read by API route on each request |
 
-   Example Dockerfile snippet — `NEXT_PUBLIC_*` vars set **before** the build step:
+   > **CreateOS note:** CreateOS uses the Dockerfile when one is present. Use a **single-stage** Dockerfile only — multi-stage builds with `COPY --from=builder` fail on this platform. Remove the Dockerfile entirely to fall back to CreateOS's default install/run commands. See the CreateOS section (step 10) for the runtime config workaround for `NEXT_PUBLIC_*` vars.
+
+   Example Dockerfile (single-stage, compatible with CreateOS):
    ```dockerfile
-   # ── Build stage ──
-   FROM node:20-alpine AS builder
+   FROM node:20-alpine
    WORKDIR /app
    COPY package*.json ./
    RUN npm ci
@@ -140,20 +141,12 @@ Before each step, check if the work is already done. Skip steps that are already
    ENV NEXT_PUBLIC_NODEOPS_REDIRECT_URI=$NEXT_PUBLIC_NODEOPS_REDIRECT_URI
    ENV NEXT_PUBLIC_NODEOPS_SCOPES=$NEXT_PUBLIC_NODEOPS_SCOPES
 
-   RUN npm run build
-
-   # ── Runtime stage ──
-   FROM node:20-alpine AS runner
-   WORKDIR /app
-   COPY --from=builder /app/.next ./.next
-   COPY --from=builder /app/public ./public
-   COPY --from=builder /app/package*.json ./
-   COPY --from=builder /app/node_modules ./node_modules
-
    # Server-side vars — only needed at runtime, read per-request by API routes
    ENV NODEOPS_CLIENT_SECRET=""
    ENV NODEOPS_TOKEN_URL=https://id.nodeops.network/oauth2/token
    ENV NODEOPS_USERINFO_URL=https://autogen-v2-api.nodeops.network/v1/users/me
+
+   RUN npm run build
 
    EXPOSE 3000
    CMD ["npm", "start"]
@@ -169,9 +162,7 @@ Before each step, check if the work is already done. Skip steps that are already
 
    **If the project deploys to Vercel or similar**: no Dockerfile is needed — those platforms inject env vars before building automatically. Just remind the user to add the vars in their platform's dashboard.
 
-   > **CreateOS note:** CreateOS does NOT use the Dockerfile for builds. It runs `npm ci && npm run build` directly, then injects env vars at container start. `NEXT_PUBLIC_*` vars will be empty at build time. See the CreateOS section below for the runtime config workaround.
-
-10. **CreateOS / build-then-inject platforms** — if the user is deploying to CreateOS or any platform that runs `npm run build` before injecting env vars, the Dockerfile ARG/ENV approach will NOT work. `NEXT_PUBLIC_*` vars will be `undefined` at build time.
+10. **CreateOS / build-then-inject platforms** — CreateOS uses the Dockerfile when one is present, but injects env vars **after** the build step. This means `NEXT_PUBLIC_*` vars are `undefined` at build time even with ARG/ENV in the Dockerfile. Use the runtime config workaround below, or remove the Dockerfile entirely to fall back to CreateOS's default install/run commands.
 
     ### What the package handles automatically (v1.x+)
 
