@@ -1,7 +1,5 @@
 # InFlow — Overview
 
-> Source: `inflow-api-reference (1).json` (OpenAPI 3.1.0, v1.0). This doc only describes what's actually in the spec.
-
 ## What InFlow Is
 
 InFlow is a stablecoin payment platform. Sellers (merchants, agents) request payments from consumers. Consumers approve via a separate device (mobile app, email, SMS), and settlements happen on-chain.
