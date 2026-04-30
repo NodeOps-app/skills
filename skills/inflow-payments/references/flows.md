@@ -1,7 +1,5 @@
 # InFlow — Integration Flows
 
-> Concrete integration flows derived from the OpenAPI spec. Every endpoint, schema, and field shown here exists in `inflow-api-reference (1).json`.
-
 ## Prerequisites
 
 - An InFlow API key (from the dashboard or `POST /v1/users/agentic`)

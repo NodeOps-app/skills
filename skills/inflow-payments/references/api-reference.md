@@ -1,7 +1,5 @@
 # InFlow — API Reference
 
-> Source: `inflow-api-reference (1).json` (OpenAPI 3.1.0 spec, v1.0)
-
 ## Base URL
 
 ```
