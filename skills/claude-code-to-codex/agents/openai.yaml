@@ -1,0 +1,4 @@
+interface:
+  display_name: "Claude Code to Codex"
+  short_description: "Migrate Claude Code CLI setup to Codex CLI."
+  default_prompt: "Migrate my Claude Code CLI configuration to Codex CLI."

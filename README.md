@@ -8,10 +8,15 @@ AI agent skills for the [NodeOps](https://nodeops.network) ecosystem. Works with
 |-------|-------------|---------|
 | **createos** | Deploy anything to production on CreateOS cloud platform | `npx skills add https://github.com/NodeOps-app/skills --skill createos` |
 | **vercel-to-createos** | Migrate Next.js, Vite, React, Vue, Svelte apps from Vercel to CreateOS | `npx skills add https://github.com/NodeOps-app/skills --skill vercel-to-createos` |
+| **claude-code-to-codex** | Migrate Claude Code CLI hooks, MCP servers, plugins, instructions, and sessions to Codex CLI | `npx skills add https://github.com/NodeOps-app/skills --skill claude-code-to-codex` |
 
 ### Migration skills
 
 `vercel-to-createos` is the first shipped skill in the migration family. Stubs for `netlify-to-createos`, `railway-to-createos`, `heroku-to-createos`, `render-to-createos`, and `flyio-to-createos` are reserved and route users to the concierge migration path until they ship. See [MIGRATIONS.md](./MIGRATIONS.md) for the full list and roadmap.
+
+### Agent migration skills
+
+`claude-code-to-codex` migrates Claude Code CLI setups to Codex CLI, with focused coverage for hooks, Claude Code CLI MCP servers, plugins, and session handoff.
 
 ## CreateOS Authentication
 
