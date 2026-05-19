@@ -67,3 +67,7 @@ target/
 .claude/
 .claude_consciousness.m8
 .opencode/
+.firecrawl/
+
+# skill-creator eval/optimization artifacts
+skills/*-workspace/

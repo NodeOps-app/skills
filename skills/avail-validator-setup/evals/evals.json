@@ -1,0 +1,38 @@
+{
+  "skill_name": "avail-validator-setup",
+  "evals": [
+    {
+      "id": 0,
+      "name": "turing-full-lifecycle-docker",
+      "prompt": "I want to run an Avail validator on the Turing testnet using Docker on a fresh Ubuntu box. Walk me through everything from getting the node container up and synced to actually becoming an active validator that produces blocks with my stake. I keep getting confused about session keys vs my wallet accounts.",
+      "expected_output": "Ordered day-0 then day-1 runbook with Turing-concrete commands; clear session-keys-vs-wallet-accounts explanation; confirm-via-logs.",
+      "files": [],
+      "assertions": [
+        "Uses --chain turing for the testnet (does not invent a 'testnet' chain alias or use mainnet)",
+        "Pins an explicit availj/avail image tag and says not to use :latest, with a verify step before pull",
+        "docker run includes --validator and binds RPC 9944 / metrics 9615 to localhost while exposing only p2p 30333",
+        "Tells the user to wait for Role: AUTHORITY and a synced/idle node before starting day-1 staking",
+        "Generates session keys with author_rotateKeys via docker exec and restarts the node afterward",
+        "Clearly distinguishes on-box session keys from off-box wallet stash/controller accounts",
+        "Bonds from the stash (>=50000 AVAIL) and submits setKeys + validate signed by the controller",
+        "Says to confirm the validator is active via node logs (block proposing), not the staking UI alone"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "mainnet-keys-and-port-hardening",
+      "prompt": "Setting up an Avail mainnet validator with the availj/avail docker image. Two things I care about: (1) the secure way to generate and register session keys so I don't get slashed, and (2) locking down the box so my RPC port isn't exposed to the internet and the keys are safe. Where do the private keys actually live?",
+      "expected_output": "Mainnet-concrete secure setup: tag verification, localhost-bound RPC/metrics, key-category model, on-disk key locations, equivocation rule, encrypted off-box backup.",
+      "files": [],
+      "assertions": [
+        "Uses --chain mainnet",
+        "Secure tag selection: explicitly avoids :latest and verifies the tag/digest (e.g. skopeo) before pulling",
+        "Binds RPC 9944 and metrics 9615 to 127.0.0.1 and exposes only p2p 30333 publicly",
+        "States private session keys live in <base-path>/chains/<chainid>/keystore inside the Docker volume, and node key in network/",
+        "Explains the three key categories and that stash and controller must be separate accounts kept off the box",
+        "States never run two nodes with the same keystore (equivocation = slashing of validator and nominators)",
+        "Recommends an encrypted off-box backup of keystore + network and restrictive file permissions"
+      ]
+    }
+  ]
+}
