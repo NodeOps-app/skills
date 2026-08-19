@@ -6,49 +6,116 @@ argument-hint: "[service] [plan]"
 
 # Deploy to CreateOS
 
-**No auth session, no OAuth, no browser login required.** This skill uses the HTTP 402 payment flow — the on-chain payment itself is the access control. Just call the API, pay with USDC/USDT, and deploy.
+**No auth session, no OAuth, no browser login required.** This skill uses the HTTP 402 payment flow — the on-chain payment itself is the access control. Call the API, pay with USDC/USDT, deploy.
+
+Base URL: `https://mpp-createos.nodeops.network`
 
 ## Prerequisites
 
-You need an EVM wallet with gas (ETH) and USDC on a supported chain. Generate one if needed:
+An EVM wallet with gas (ETH) and USDC on **Arbitrum or Base mainnet**. Testnets are not accepted. Generate a wallet if needed:
 
 ```ts
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 const privateKey = generatePrivateKey();
 const account = privateKeyToAccount(privateKey);
-// Save privateKey securely
+// Save privateKey securely, outside the project directory
 ```
 
 Only dependency: `npm install viem`
 
+## Validate before you pay
+
+The gateway accepts the body loosely and CreateOS rejects it strictly. A bad name is only caught **after** payment. Check these first:
+
+| Field        | Rule                                                   |
+| ------------ | ------------------------------------------------------ |
+| `uniqueName` | 4–32 chars, must be globally unique on CreateOS         |
+| `displayName`| 4–100 chars, letters/digits/space/`_ \| , & - ' " / \\` |
+| `description`| omit, or 4–2048 chars                                   |
+
 ## Flow
 
-1. `POST /agent/deploy` (no payment) — gateway checks credits AND active projects
-   - **Has credits, no active projects** → deploys directly, returns 200. Skip to step 5.
-   - **Has credits, has active projects** → returns 402 with a warning. The agent must either:
-     - **Pay** to extend total runtime (recommended), OR
-     - **Retry with header `X-Use-Existing-Credits: true`** to deploy using existing credits (this will reduce runtime of the other active projects)
-   - **No credits** → returns 402 with `pay_to`, `amount_token`, `payment_chain`, `supported_chains`
-2. `GET /agent/balance/:address?chain=...` — check token balance on each supported chain
+1. `POST /agent/deploy` (no payment headers) — the gateway checks credits AND active projects, then returns one of:
+   - **200** — has credits, no active projects → already deploying. Skip to step 5.
+   - **402 with `warning`** — has credits, but active projects share them. Either **pay** (recommended, extends total runtime) or retry with `X-Use-Existing-Credits: true`.
+   - **402 without `warning`** — no credits. Body carries `pay_to`, `amount_token`, `payment_chain`, `token`, `supported_chains`.
+2. `GET /agent/balance/{address}?chain=...` — confirm the wallet can pay on the quoted chain.
 3. If no chain has enough balance, **stop and tell the user**:
    > "Your wallet `0x...` doesn't have enough funds to deploy. Please add **{amount_usd} {token}** on **{chain}** to address `0x...`."
    >
-   > Show all supported chains so the user can pick one to fund.
-4. Send ERC20 transfer to `pay_to` using viem → get `txHash`
-   `POST /agent/deploy` with `X-Payment-Tx: txHash` → verifies payment, topups credits, deploys
-5. `GET /agent/deploy/:projectId/:deploymentId/status` → poll until ready
+   > List every chain from `GET /agent/chains` so the user can pick one to fund.
+4. Send the ERC20 transfer to `pay_to` with viem, wait for the receipt, then `POST /agent/deploy` again with `X-Payment-Tx: {txHash}`. The gateway verifies on-chain, tops up credits, and deploys.
+5. `GET /agent/deploy/{projectId}/{deploymentId}/status` → poll every 5s until `ready` or `failed`.
 
-## Credit Sharing & Active Projects
+**Do the payment and step 4 back to back.** The price is re-derived on the second call from a 5-minute cache. If it rises in between, verification fails on an amount that already left the wallet.
 
-NodeOps credits are pooled across all your active projects and consumed hourly. When you have **multiple active deployments**, they share the same credit balance.
+## After you have paid
 
-- If you have **0 active projects** and credits: deploys for free, no impact.
-- If you have **1+ active projects** and you deploy without paying, the new project will share the credit pool — **reducing runtime of the other projects**.
-- The gateway prevents this by default: if you have active projects, you must either pay (to add fresh credits) or explicitly opt in via `X-Use-Existing-Credits: true`.
+Once the transfer confirms, the money is gone from the wallet. Never send a second payment to recover from an error.
 
-**Always tell the user** when their deploy will affect other active projects, and recommend paying instead.
+| Response to step 4 | What happened | What to do |
+| ------------------ | ------------- | ---------- |
+| `200` | Deployed | Poll status |
+| `500` | Credits **were** topped up, the deploy itself failed | Retry `POST /agent/deploy` with **no** payment headers, plus `X-Use-Existing-Credits: true` |
+| `409` | This tx hash was already processed | Same as 500 — the credits exist, retry without payment headers |
+| `402 Payment verification failed` | Tx not found on that chain, wrong recipient, or under the quoted amount | Do **not** re-pay. Confirm `X-Payment-Chain` matches the chain you paid on, then surface the tx hash to the user |
 
-## Utility Endpoints (no auth required)
+## Credit sharing and active projects
+
+CreateOS credits are pooled across all your active projects and consumed hourly. Multiple active deployments share one balance.
+
+- **0 active projects + credits** → deploys free, no impact on anything.
+- **1+ active projects, deploy without paying** → the new project draws from the same pool, **shortening the runtime of the others**.
+
+The gateway blocks that by default: with active projects you must either pay or opt in with `X-Use-Existing-Credits: true`.
+
+**Always tell the user** when a deploy will eat into other projects' runtime, and recommend paying instead.
+
+A project counts as active when its status is `active`, `building`, `deploying`, `pending`, `queued`, or `promoting`.
+
+## Deploy settings
+
+`settings` is optional and merged over these defaults:
+
+```json
+{
+  "port": 3000,
+  "runtime": "build-ai",
+  "useBuildAI": true,
+  "hasDockerfile": false,
+  "framework": null,
+  "installCommand": null,
+  "buildCommand": null,
+  "runCommand": null,
+  "buildDir": null,
+  "directoryPath": null,
+  "runEnvs": null
+}
+```
+
+- **`port`** — must match the port your app listens on. This is the one field worth setting explicitly.
+- **`useBuildAI: true`** infers install/build/run commands from the source. Set `hasDockerfile: true` and keep a `Dockerfile` at the upload root to build that instead.
+- **`directoryPath`** — subdirectory to build from, for monorepos.
+- Resources are fixed at 1 replica / 512 MiB / 500m CPU and are not configurable through this gateway.
+
+**Known limitation — runtime env vars do not reach the running container.** The gateway creates the production environment with an empty env map, so `settings.runEnvs` does not survive promotion. Bake configuration into the upload, or fix the gateway to forward `environment.settings.runEnvs`.
+
+## Auth headers (all `/agent/*` except `/balance`, `/chains`, `/recipients`)
+
+Sign the message `{wallet}:{timestamp}:{nonce}` with your private key (EIP-191, `viem` `signMessage`).
+
+```
+X-Wallet-Address: 0xYourWallet
+X-Signature: 0xSignedMessage
+X-Timestamp: 1711500000000
+X-Nonce: unique-uuid
+```
+
+- The wallet string inside the message must match `X-Wallet-Address` byte for byte, including case.
+- `X-Timestamp` is Unix **milliseconds** and must be within 60s of the server clock.
+- `X-Nonce` is single-use. Generate a fresh nonce, timestamp, and signature for **every** request, including each status poll.
+
+## Utility endpoints (no auth)
 
 **Check balance** — all tokens on a chain:
 
@@ -60,8 +127,9 @@ GET /agent/balance/0xYourWallet?chain=arbitrum
 {
   "address": "0x...",
   "chain": "arbitrum",
+  "chain_id": 42161,
   "balances": [
-    { "token": "usdc", "symbol": "USDC", "balance": "18.000000", "decimals": 6 }
+    { "token": "usdc", "symbol": "USDC", "balance": "18.000000", "balance_raw": "18000000", "decimals": 6 }
   ]
 }
 ```
@@ -75,30 +143,21 @@ GET /agent/chains
 ```json
 {
   "chains": [
-    { "chain": "arbitrum", "chain_id": 42161, "tokens": ["usdc", "usdt"] },
-    { "chain": "base", "chain_id": 8453, "tokens": ["usdc", "usdt"] }
+    { "chain": "base", "chain_id": 8453, "tokens": ["usdc", "usdt"] },
+    { "chain": "arbitrum", "chain_id": 42161, "tokens": ["usdc", "usdt"] }
   ]
 }
 ```
 
-## Auth Headers (all requests)
+Also available: `GET /agent/recipients` (payment address per chain), `GET /health`, `GET /openapi.json`.
 
-Sign `{wallet}:{timestamp}:{nonce}` with your private key.
-
-```
-X-Wallet-Address: 0xYourWallet
-X-Signature: 0xSignedMessage
-X-Timestamp: 1711500000000
-X-Nonce: unique-uuid
-```
-
-## List Your Projects (auth required)
+## List your projects (auth required)
 
 ```
 GET /agent/projects
 ```
 
-Returns all projects deployed by the wallet, with the live URL of the latest deployment for each.
+Returns every project deployed by the wallet, with the live URL of the latest deployment.
 
 ```json
 {
@@ -117,23 +176,21 @@ Returns all projects deployed by the wallet, with the live URL of the latest dep
 }
 ```
 
-`url` will be `null` if the project has no successful deployment yet. Status values: `active`, `building`, `deploying`, `pending`, `queued`, `promoting`, `deleting`, `failed`.
+`url` is `null` until a deployment succeeds. Status values: `active`, `building`, `deploying`, `pending`, `queued`, `promoting`, `deleting`, `failed`.
 
-## Delete a Project (auth required)
+## Delete a project (auth required)
 
 ```
 DELETE /agent/projects/{projectId}
 ```
 
-Permanently deletes a project from NodeOps. Only the wallet that originally deployed the project can delete it.
+Permanently deletes a project from CreateOS. Only the wallet that deployed it can delete it. **Irreversible — confirm with the user first.**
 
 ```json
 { "projectId": "uuid", "status": "deleted" }
 ```
 
-Errors: `403` if the wallet is not the deployer.
-
-## Step 1: Get Quote
+## Step 1: Get quote
 
 ```
 POST /agent/deploy
@@ -142,6 +199,7 @@ Content-Type: application/json
 {
   "uniqueName": "my-app",
   "displayName": "My App",
+  "settings": { "port": 3000 },
   "upload": { "type": "files", "files": [{ "path": "index.js", "content": "base64..." }] }
 }
 ```
@@ -177,9 +235,9 @@ Response `402` (has credits but active projects exist):
 }
 ```
 
-## Step 2: Pay
+Pay `amount_token` exactly as given — it is the raw integer amount, already scaled to the token's 6 decimals. Overpaying is accepted; underpaying is not.
 
-Send ERC20 transfer with viem:
+## Step 2: Pay
 
 ```ts
 import { createWalletClient, createPublicClient, http } from "viem";
@@ -205,9 +263,11 @@ const txHash = await walletClient.writeContract({
 await publicClient.waitForTransactionReceipt({ hash: txHash });
 ```
 
+Send to the chain named in `quote.payment_chain`. Paying on any other chain fails verification.
+
 ## Step 3: Deploy
 
-Same request body, add payment header:
+Same request body, add the payment headers:
 
 ```
 POST /agent/deploy
@@ -219,7 +279,7 @@ X-Payment-Token: usdc
 Response `200`:
 
 ```json
-{ "projectId": "uuid", "deploymentId": "uuid", "status": "deploying" }
+{ "projectId": "uuid", "deploymentId": "uuid", "status": "deploying", "message": "..." }
 ```
 
 ## Step 4: Poll
@@ -228,34 +288,34 @@ Response `200`:
 GET /agent/deploy/{projectId}/{deploymentId}/status
 ```
 
-- `{ "status": "deploying" }` — keep polling every 5s
+- `{ "status": "deploying", "deployment_status": "building" }` — keep polling every 5s
 - `{ "status": "ready", "endpoint": "https://..." }` — done
 - `{ "status": "failed", "reason": "..." }` — stop
 
-## Upload Types
+Typical build takes 2–3 minutes. Give up after 10 minutes.
+
+## Upload types
 
 Files: `{ "type": "files", "files": [{ "path": "...", "content": "base64" }] }`
 Zip: `{ "type": "zip", "data": "base64-zip", "filename": "code.zip" }`
 
-**Important:** When uploading files, exclude build artifacts and dependencies:
+The whole JSON request is capped at **50 MB**, and base64 inflates the payload by about a third. Keep the upload to source and config only:
 
-- `node_modules/`, `dist/`, `build/`, `.next/`
-- `.env`, `.env.*`, keys, secrets
-- `.git/`, `.DS_Store`
-- `__pycache__/`, `venv/`, `.venv/`
+- Exclude `node_modules/`, `dist/`, `build/`, `.next/`, `target/`, `__pycache__/`, `venv/`, `.venv/`
+- Exclude `.git/`, `.DS_Store`
+- **Never upload** `.env`, `.env.*`, private keys, or any secret — including the wallet key used to pay
 
-Only upload source code and config files needed to build and run the project.
+## Error codes
 
-## Error Codes
-
-| Code | Meaning                                 |
-| ---- | --------------------------------------- |
-| 400  | Invalid body                            |
-| 401  | Bad signature / expired / nonce reused  |
-| 402  | Payment required or verification failed |
-| 403  | Wrong wallet on status endpoint         |
-| 409  | Tx hash already used                    |
-| 429  | Rate limited (30/min)                   |
+| Code | Meaning                                                       |
+| ---- | ------------------------------------------------------------- |
+| 400  | Invalid body, bad tx hash format, or bad wallet address        |
+| 401  | Missing/bad signature, timestamp outside 60s, nonce reused     |
+| 402  | Payment required, or on-chain verification failed              |
+| 403  | Wallet is not the deployer of this project/deployment          |
+| 409  | Tx hash already processed — credits exist, retry without payment |
+| 429  | Rate limited (30 req/min per wallet+IP, across all `/agent/*`) |
+| 500  | Topup succeeded but deploy failed — retry without payment      |
 
 ## Reference
 

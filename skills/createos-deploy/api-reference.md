@@ -2,14 +2,24 @@
 
 Base URL: `https://mpp-createos.nodeops.network`
 
-## Auth Headers (all `/agent/*` endpoints)
+Machine-readable spec: `GET /openapi.json`
 
-| Header             | Value                                       |
-| ------------------ | ------------------------------------------- |
-| `X-Wallet-Address` | `0x...` wallet address                      |
-| `X-Signature`      | Signature of `{wallet}:{timestamp}:{nonce}` |
-| `X-Timestamp`      | Unix ms (within 60s of server)              |
-| `X-Nonce`          | UUID, unique per request                    |
+## Auth Headers
+
+Required on `/agent/deploy`, `/agent/deploy/*/status`, `/agent/projects`, and
+`DELETE /agent/projects/:id`. Not required on `/agent/balance`, `/agent/chains`,
+`/agent/recipients`, or `/health`.
+
+| Header             | Value                                                        |
+| ------------------ | ------------------------------------------------------------ |
+| `X-Wallet-Address` | `0x...` wallet address                                        |
+| `X-Signature`      | EIP-191 signature of `{wallet}:{timestamp}:{nonce}`           |
+| `X-Timestamp`      | Unix **milliseconds**, within 60s of the server clock         |
+| `X-Nonce`          | UUID, single-use — a replay returns 401                       |
+
+The `{wallet}` inside the signed message must be byte-identical to
+`X-Wallet-Address`, case included. Generate a fresh nonce, timestamp, and
+signature per request, including every status poll.
 
 ---
 
@@ -21,18 +31,24 @@ Response: `{ "status": "ok" }`
 
 ## `POST /agent/deploy`
 
-Gateway dynamically prices deployments by querying CreateOS, then checks credits and active projects to decide whether to deploy free or require payment. Minimum charge is $0.50.
+The gateway prices the deployment from the CreateOS pricing API, then checks the
+wallet's credit balance and active project count to decide whether to deploy for
+free or require payment.
 
 ### Without `X-Payment-Tx` — credit + active project check
 
-The gateway returns one of:
+| Case | Credits | Active projects | `X-Use-Existing-Credits` | Result |
+| ---- | ------- | --------------- | ------------------------ | ------ |
+| A    | enough  | 0               | any                      | `200`, deploys free |
+| B    | enough  | ≥1              | `true`                   | `200`, deploys free, `message` warns about shared runtime |
+| C    | enough  | ≥1              | unset                    | `402` with `warning` |
+| D    | short   | any             | any                      | `402` standard |
 
-**Case A: Has credits, no active projects** → 200, deploys for free
-**Case B: Has credits, active projects, opted in (`X-Use-Existing-Credits: true`)** → 200, deploys with warning
-**Case C: Has credits, active projects, NOT opted in** → 402 with warning
-**Case D: Not enough credits** → 402 standard
+If the credit or active-project lookup against CreateOS fails, the gateway fails
+closed: balance is treated as 0 and active projects as 0, so you get case D.
 
 402 (no credits):
+
 ```json
 {
   "error": "Payment required",
@@ -49,11 +65,13 @@ The gateway returns one of:
 ```
 
 402 (has credits + active projects):
+
 ```json
 {
   "error": "Payment required",
   "warning": "You have 2 active project(s) sharing credits. Paying extends total runtime. To deploy using existing credits (will reduce other projects' runtime), retry with header X-Use-Existing-Credits: true",
   "amount_usd": 0.5,
+  "amount_token": "500000",
   "current_credit_balance_usd": 1.20,
   "active_projects": 2,
   "pay_to": "0x7EA5...",
@@ -61,23 +79,38 @@ The gateway returns one of:
 }
 ```
 
-### With `X-Payment-Tx` — deploys
+`amount_token` is the raw integer amount at 6 decimals. `token` is always
+reported as `usdc`, but USDT is accepted at the same raw amount — both are
+6-decimal on both chains. Select it with `X-Payment-Token: usdt`.
 
-Additional headers:
+`pay_to` is the same recipient address on every supported chain.
 
-| Header            | Required | Default  | Description            |
-| ----------------- | -------- | -------- | ---------------------- |
-| `X-Payment-Tx`    | yes      | —        | ERC20 transfer tx hash |
-| `X-Payment-Chain` | no       | from 402 | Chain name             |
-| `X-Payment-Token` | no       | `usdc`   | Token symbol           |
-| `X-Use-Existing-Credits` | no | `false` | Opt in to share credits with active projects (no payment) |
+### With `X-Payment-Tx` — verify, topup, deploy
 
-Body:
+| Header                   | Required | Default            | Description                              |
+| ------------------------ | -------- | ------------------ | ---------------------------------------- |
+| `X-Payment-Tx`           | yes      | —                  | ERC20 transfer tx hash, `0x` + 64 hex     |
+| `X-Payment-Chain`        | no       | gateway default    | Chain the transfer landed on              |
+| `X-Payment-Token`        | no       | `usdc`             | `usdc` or `usdt`                          |
+| `X-Use-Existing-Credits` | no       | `false`            | Ignored when `X-Payment-Tx` is present    |
+
+Verification requires a `Transfer` log from the named token contract, to
+`pay_to`, for **at least** the quoted amount, in a successful transaction on the
+named chain. Overpayment passes. Underpayment, wrong chain, or wrong token
+returns `402 Payment verification failed` — and the funds have already moved.
+
+The price is re-derived on this call from a 5-minute server cache. Submit the
+proof promptly after the transfer confirms.
+
+### Body
 
 ```json
 {
   "uniqueName": "my-app",
   "displayName": "My App",
+  "description": "optional",
+  "months": 1,
+  "settings": { "port": 3000 },
   "upload": {
     "type": "files",
     "files": [{ "path": "index.js", "content": "base64" }]
@@ -87,44 +120,99 @@ Body:
 
 Or zip: `"upload": { "type": "zip", "data": "base64", "filename": "code.zip" }`
 
-Optional: `months` (default 1), `description`, `settings`.
+Whole request capped at 50 MB. Base64 adds ~33% over the raw bytes.
 
-Response `200`:
+### Field constraints
 
-```json
-{ "projectId": "uuid", "deploymentId": "uuid", "status": "deploying" }
-```
+Enforced by CreateOS, **not** by the gateway — a violation surfaces as a `500`
+after payment has already been taken.
+
+| Field         | Constraint |
+| ------------- | ---------- |
+| `uniqueName`  | 4–32 chars, `[a-zA-Z0-9 _\|,&\-'",/\\:;()\[\]+*]`, globally unique |
+| `displayName` | 4–100 chars, `[a-zA-Z0-9 _\|,&\-'",/\\]` |
+| `description` | optional; 4–2048 chars if present |
+| `months`      | positive integer, default 1 — multiplies the price |
+
+### `settings`
+
+All fields optional. Defaults applied by the gateway:
+
+| Field            | Default      | Notes |
+| ---------------- | ------------ | ----- |
+| `port`           | `3000`       | 1–65535, must match what the app listens on |
+| `runtime`        | `"build-ai"` | |
+| `useBuildAI`     | `true`       | Infers install/build/run from the source |
+| `hasDockerfile`  | `false`      | `true` builds the `Dockerfile` at the upload root |
+| `framework`      | `null`       | |
+| `installCommand` | `null`       | max 255 chars |
+| `buildCommand`   | `null`       | max 255 chars |
+| `runCommand`     | `null`       | max 255 chars |
+| `buildDir`       | `null`       | max 255 chars |
+| `buildFlag`      | `null`       | max 255 chars |
+| `runFlag`        | `null`       | max 255 chars |
+| `directoryPath`  | `null`       | Subdirectory to build from |
+| `runEnvs`        | `null`       | See limitation below |
+| `buildVars`      | `null`       | Typed as a string by the gateway but CreateOS expects an object — leave `null` |
+
+**`runEnvs` does not reach the running container.** The gateway creates the
+production environment with an empty env map, and the promoted environment's
+env is what the container gets. Bake configuration into the upload instead.
+
+Resources are fixed at 1 replica, 512 MiB memory, 500m CPU. Not configurable via
+this gateway, and CreateOS may clamp them to the plan minimum regardless.
+
+### Responses
+
+| Code | Body |
+| ---- | ---- |
+| `200` | `{ projectId, deploymentId, status: "deploying", message }` |
+| `400` | Invalid body, malformed tx hash |
+| `401` | Bad signature, expired timestamp, replayed nonce |
+| `402` | Payment required, or `{ "error": "Payment verification failed" }` |
+| `409` | `{ "error": "Payment already processed" }` — credits exist, retry without payment headers |
+| `429` | Rate limited |
+| `500` | Topup succeeded, deploy failed — credits are on CreateOS, retry without payment headers |
 
 ## Pricing
 
-- Pricing is dynamic — fetched from CreateOS pricing API and converted to USD ($1 = 100 credits)
-- Cached server-side for 5 minutes
-- Minimum deploy price: **$0.50**
+- Dynamic, fetched from the CreateOS pricing API and converted at $1 = 100 credits
+- Cached server-side for 5 minutes; 30s backoff on a failed refresh
 - Multiplied by `months` (default 1)
+- Floor: **$0.50**
 
-## Credit Sharing
+If pricing cannot be fetched and no cache exists, `POST /agent/deploy` fails
+before any quote is issued.
 
-CreateOS credits are pooled across active projects and consumed hourly. Deploying without paying when you have active projects will reduce their runtime — the gateway warns you in 402 responses and requires explicit opt-in.
+## Credit sharing
+
+CreateOS credits are pooled across active projects and consumed hourly. Statuses
+counted as active: `active`, `building`, `deploying`, `pending`, `queued`,
+`promoting`. Deploying without paying while projects are active shortens their
+runtime — the gateway warns in the 402 and requires explicit opt-in.
 
 ---
 
 ## `GET /agent/deploy/:projectId/:deploymentId/status`
 
-Only the deployer wallet can access.
+Auth required. Only the wallet recorded as the deployer can read it; anyone else
+gets `403`.
 
 ```json
-{ "status": "deploying", "deployment_status": "building" }
-{ "status": "ready", "endpoint": "https://app.nodeops.network" }
-{ "status": "failed", "reason": "build error" }
+{ "status": "deploying", "deployment_id": "uuid", "deployment_status": "building", "message": "Deployment in progress" }
+{ "status": "ready",     "deployment_id": "uuid", "endpoint": "https://app.nodeops.network" }
+{ "status": "failed",    "deployment_id": "uuid", "deployment_status": "cancelled", "reason": "build error" }
 ```
+
+`ready` is returned when the deployment reports `active` or exposes an endpoint;
+`endpoint` may be absent in the first case. Anything outside the transitional set
+(`promoting`, `building`, `deploying`, `pending`, `queued`, `queue`) is `failed`.
 
 ---
 
 ## `GET /agent/projects`
 
-List all projects deployed by the authenticated wallet, with the live URL of the latest deployment. Requires auth headers.
-
-Response:
+Auth required. Lists every project for the wallet with the latest deployment URL.
 
 ```json
 {
@@ -143,19 +231,29 @@ Response:
 }
 ```
 
-`url` is `null` if the project has no deployment yet (e.g. building, failed, or no deployments). Project status values: `active`, `building`, `deploying`, `pending`, `queued`, `promoting`, `deleting`, `failed`.
+`url` is `null` when the project has no deployment yet, or the lookup failed.
+Status values: `active`, `building`, `deploying`, `pending`, `queued`,
+`promoting`, `deleting`, `failed`.
+
+---
+
+## `DELETE /agent/projects/:projectId`
+
+Auth required. Irreversible. CreateOS enforces ownership.
+
+```json
+{ "projectId": "uuid", "status": "deleted" }
+```
+
+Errors: `403` if the wallet is not the owner; `500` otherwise.
 
 ---
 
 ## `GET /agent/balance/:address`
 
-Returns all token balances for an address on a chain. No auth required.
+No auth. Returns every accepted token's balance for an address on one chain.
 
-Query params:
-
-- `chain` — chain name (default: `arbitrum`)
-
-Response:
+Query: `chain` — chain name, defaults to the gateway's configured chain.
 
 ```json
 {
@@ -175,17 +273,36 @@ Response:
 }
 ```
 
+Compare `balance_raw` against the quote's `amount_token` — both are raw integers.
+`400` on a malformed address or an unsupported chain.
+
 ---
 
 ## `GET /agent/chains`
 
-Returns all supported chains and accepted tokens. No auth required.
+No auth.
 
 ```json
 {
   "chains": [
-    { "chain": "arbitrum", "chain_id": 42161, "tokens": ["usdc", "usdt"] },
-    { "chain": "base", "chain_id": 8453, "tokens": ["usdc", "usdt"] }
+    { "chain": "base", "chain_id": 8453, "tokens": ["usdc", "usdt"] },
+    { "chain": "arbitrum", "chain_id": 42161, "tokens": ["usdc", "usdt"] }
+  ]
+}
+```
+
+---
+
+## `GET /agent/recipients`
+
+No auth. Payment address per chain — currently the same address on all of them.
+
+```json
+{
+  "updated_at": "2026-04-07T10:00:00.000Z",
+  "recipients": [
+    { "chain": "base", "address": "0x7EA5..." },
+    { "chain": "arbitrum", "address": "0x7EA5..." }
   ]
 }
 ```
@@ -194,20 +311,35 @@ Returns all supported chains and accepted tokens. No auth required.
 
 ## Supported Chains & Tokens
 
-| Chain      | ID    | Tokens     |
-| ---------- | ----- | ---------- |
-| `arbitrum` | 42161 | USDC, USDT |
-| `base`     | 8453  | USDC, USDT |
+Mainnet only. Testnets are not accepted.
+
+| Chain      | ID    | Token | Contract |
+| ---------- | ----- | ----- | -------- |
+| `arbitrum` | 42161 | USDC  | `0xaf88d065e77c8cC2239327C5EDb3A432268e5831` |
+| `arbitrum` | 42161 | USDT  | `0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9` |
+| `base`     | 8453  | USDC  | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+| `base`     | 8453  | USDT  | `0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2` |
+
+Always confirm against `GET /agent/chains` before paying.
+
+---
+
+## Rate Limiting
+
+30 requests per minute, keyed on IP + `X-Wallet-Address`, applied to **all**
+`/agent/*` routes including the unauthenticated ones. Polling status every 5s
+uses 12/min and leaves headroom.
 
 ---
 
 ## Error Codes
 
-| Code | Meaning                              |
-| ---- | ------------------------------------ |
-| 400  | Invalid body                         |
-| 401  | Bad signature, expired, nonce reused |
-| 402  | No payment or verification failed    |
-| 403  | Wrong wallet on status               |
-| 409  | Tx hash already used                 |
-| 429  | Rate limited (30/min)                |
+| Code | Meaning |
+| ---- | ------- |
+| 400  | Invalid body, malformed tx hash or address, unsupported chain |
+| 401  | Bad signature, timestamp outside 60s, nonce replayed |
+| 402  | Payment required, or on-chain verification failed |
+| 403  | Wallet is not the deployer / owner |
+| 409  | Tx hash already processed — credits exist, retry without payment |
+| 429  | Rate limited (30/min per wallet+IP) |
+| 500  | Topup succeeded but deploy failed — retry without payment headers |
