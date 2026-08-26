@@ -23,6 +23,63 @@ const account = privateKeyToAccount(privateKey);
 
 Only dependency: `npm install viem`
 
+## Quick start
+
+A runnable script ships with this skill. Prefer it over hand-written code.
+
+```bash
+cd path/to/this/skill && npm install
+
+# 1. Quote only. Nothing leaves the wallet without --yes.
+node deploy.mjs --dir /path/to/project --name my-app --port 8080
+
+# 2. Pay and deploy.
+node deploy.mjs --dir /path/to/project --name my-app --port 8080 --yes
+```
+
+The script collects the files, blocks secrets, pays, polls, and checks that the
+endpoint answers. Read [example.md](example.md) to build the flow by hand.
+
+| Flag | Meaning |
+| ---- | ------- |
+| `--dir` | Directory to deploy. Must be a git repository. Default `.` |
+| `--name` | `uniqueName`, 4–32 chars, globally unique on CreateOS |
+| `--port` | Required. The port the app listens on |
+| `--yes` | Send the payment. Without it the script stops after the quote |
+| `--display-name` | Defaults to `--name` |
+
+`PRIVATE_KEY` comes from the environment, then `.env` in `--dir`, then `.env`
+beside the script.
+
+## Show the price before you pay
+
+The price floor is $0.50, but the quote moves. A real deploy was quoted $1.81.
+
+Quote first, show the user the amount, and wait for approval. Skip the approval
+only when the user has already approved payment for this deploy.
+
+## Find the port before you deploy
+
+`port` is the one setting worth getting right, and a wrong value is expensive.
+The deploy still reports `ready`, and the endpoint answers nothing, after payment.
+
+Read the source to find the real value:
+
+- Go: `ListenAndServe` in `main.go`, often behind a `PORT` fallback
+- Node: `app.listen(...)` or `server.listen(...)`
+- Python: the `--bind` or `--port` flag for gunicorn or uvicorn
+- Docker: the `EXPOSE` line
+
+If the app reads `PORT` from the environment, pass the fallback in the code.
+Environment variables do not reach the container, so that fallback is what runs.
+
+## Ignore `createos.json`
+
+Some repositories carry a `createos.json` from another tool. This gateway never
+reads it. Its `runtime`, `framework`, and `port` fields can contradict the real
+project. One Go project declared `node:20`, `reactjs-spa`, and port 80 for a
+server that listens on 8080. Trust the source code instead.
+
 ## Validate before you pay
 
 The gateway accepts the body loosely and CreateOS rejects it strictly. A bad name is only caught **after** payment. Check these first:
@@ -35,6 +92,9 @@ The gateway accepts the body loosely and CreateOS rejects it strictly. A bad nam
 
 ## Flow
 
+0. `GET /agent/projects` — list what the wallet already runs. Use it to spot a
+   name collision before you pay, and to name the active projects that a
+   credit-sharing warning puts at risk.
 1. `POST /agent/deploy` (no payment headers) — the gateway checks credits AND active projects, then returns one of:
    - **200** — has credits, no active projects → already deploying. Skip to step 5.
    - **402 with `warning`** — has credits, but active projects share them. Either **pay** (recommended, extends total runtime) or retry with `X-Use-Existing-Credits: true`.
@@ -46,6 +106,9 @@ The gateway accepts the body loosely and CreateOS rejects it strictly. A bad nam
    > List every chain from `GET /agent/chains` so the user can pick one to fund.
 4. Send the ERC20 transfer to `pay_to` with viem, wait for the receipt, then `POST /agent/deploy` again with `X-Payment-Tx: {txHash}`. The gateway verifies on-chain, tops up credits, and deploys.
 5. `GET /agent/deploy/{projectId}/{deploymentId}/status` → poll every 5s until `ready` or `failed`.
+6. Fetch the `endpoint` and confirm the response. `ready` is the gateway's
+   opinion, not proof that the app serves traffic. A wrong `port` reaches
+   `ready` and answers nothing. One request catches it.
 
 **Do the payment and step 4 back to back.** The price is re-derived on the second call from a 5-minute cache. If it rises in between, verification fails on an amount that already left the wallet.
 
@@ -178,6 +241,23 @@ Returns every project deployed by the wallet, with the live URL of the latest de
 
 `url` is `null` until a deployment succeeds. Status values: `active`, `building`, `deploying`, `pending`, `queued`, `promoting`, `deleting`, `failed`.
 
+## Redeploying the same project
+
+**Open question — not yet verified.** `uniqueName` must be globally unique, and
+the gateway offers no documented "update this project" call. Reusing a name for
+a second deploy is untested, and names are validated only after payment, so a
+rejection costs money.
+
+Until this is settled, do the safe thing:
+
+1. `GET /agent/projects` and look for the name.
+2. If the name is free, deploy it.
+3. If the name is taken, either deploy under a new name, or `DELETE` the old
+   project first and confirm the deletion with the user.
+
+`deploy.mjs` warns when the name already exists on the wallet. It does not
+choose for you.
+
 ## Delete a project (auth required)
 
 ```
@@ -299,11 +379,32 @@ Typical build takes 2–3 minutes. Give up after 10 minutes.
 Files: `{ "type": "files", "files": [{ "path": "...", "content": "base64" }] }`
 Zip: `{ "type": "zip", "data": "base64-zip", "filename": "code.zip" }`
 
-The whole JSON request is capped at **50 MB**, and base64 inflates the payload by about a third. Keep the upload to source and config only:
+The whole JSON request is capped at **50 MB**, and base64 inflates the payload by about a third. Keep the upload to source and config only.
 
-- Exclude `node_modules/`, `dist/`, `build/`, `.next/`, `target/`, `__pycache__/`, `venv/`, `.venv/`
-- Exclude `.git/`, `.DS_Store`
-- **Never upload** `.env`, `.env.*`, private keys, or any secret — including the wallet key used to pay
+### Collect the files with git, not by hand
+
+Do not write the file list yourself. A hand-written list misses files, and a
+plain directory walk sweeps in secrets. Let git produce the set:
+
+```bash
+git ls-files -z --cached --others --exclude-standard
+```
+
+That honours `.gitignore`, so `node_modules/`, `dist/`, `build/`, `.next/`,
+`target/`, `__pycache__/`, `venv/`, and `.git/` drop out with no exclude list.
+
+Then filter the result twice:
+
+1. **Secrets.** `.env`, `.env.*`, `*.pem`, `*.key`, `*.p12`, `id_rsa*`,
+   `credentials.json`, `.npmrc`. An untracked `.env` is **not** ignored by git,
+   so it reaches the upload unless you filter it. The wallet key that pays for
+   the deploy often sits in that exact file.
+2. **Agent and editor tooling.** `.agents/`, `.claude/`, `.cursor/`,
+   `.opencode/`, `.vscode/`, `.idea/`, `skills-lock.json`. These are tracked in
+   many repositories and belong to no running app. In one six-file Go project
+   they added 39 files and grew the upload from 8 KB to 649 KB.
+
+`deploy.mjs` applies both filters and prints what it dropped.
 
 ## Error codes
 

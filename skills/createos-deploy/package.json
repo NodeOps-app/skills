@@ -1,0 +1,9 @@
+{
+  "name": "createos-deploy",
+  "private": true,
+  "type": "module",
+  "description": "Runnable deploy script for the CreateOS MPP Gateway",
+  "dependencies": {
+    "viem": "2.55.19"
+  }
+}
