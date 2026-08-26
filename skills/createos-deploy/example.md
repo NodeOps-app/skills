@@ -1,5 +1,9 @@
 # Complete Example
 
+> **Prefer [`deploy.mjs`](deploy.mjs).** It ships with this skill and already
+> handles file collection, secret filtering, the price gate, and the endpoint
+> check. Read on only to build the flow yourself.
+
 Deploy to CreateOS with plain `fetch` + `viem`. No extra dependency beyond `viem`.
 
 This handles all four gateway responses: free deploy on credits, pay-first,
@@ -10,9 +14,27 @@ import { privateKeyToAccount } from "viem/accounts";
 import { createWalletClient, createPublicClient, http } from "viem";
 import { arbitrum, base } from "viem/chains";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+
+const projectDir = process.cwd();
 
 const GATEWAY = "https://mpp-createos.nodeops.network";
-const account = privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`);
+
+// The key usually lives in a .env file, not the shell environment. Read it
+// directly and never add that file to the upload.
+function loadPrivateKey(dir: string): `0x${string}` {
+  const fromEnv = process.env.PRIVATE_KEY;
+  if (fromEnv) return fromEnv as `0x${string}`;
+  const line = readFileSync(`${dir}/.env`, "utf8")
+    .split("\n")
+    .find((l) => l.trim().startsWith("PRIVATE_KEY="));
+  if (!line) throw new Error("no PRIVATE_KEY in the environment or .env");
+  const key = line.trim().slice("PRIVATE_KEY=".length).replace(/^["']|["']$/g, "");
+  return (key.startsWith("0x") ? key : `0x${key}`) as `0x${string}`;
+}
+
+const account = privateKeyToAccount(loadPrivateKey(process.cwd()));
 
 // Only these chains are accepted. Testnets are NOT supported.
 const CHAINS = { arbitrum, base } as const;
@@ -57,22 +79,35 @@ const auth = async () => {
 
 // uniqueName: 4-32 chars. displayName: 4-100 chars. Validate BEFORE paying —
 // the backend rejects bad names only after the payment step.
+// Let git produce the file set. It honours .gitignore, so node_modules/,
+// dist/, and .git/ drop out on their own. Then filter secrets and agent
+// tooling — an untracked .env is not ignored by git and would be uploaded.
+const DENY = [
+  /(^|\/)\.env($|\.)/,
+  /\.(pem|key|p12|pfx)$/i,
+  /(^|\/)id_(rsa|ed25519)($|\.)/,
+  /(^|\/)\.(agents|claude|cursor|opencode|vscode|idea)(\/|$)/,
+];
+
+const files = execFileSync(
+  "git",
+  ["ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+  { cwd: projectDir },
+)
+  .toString("utf8")
+  .split("\0")
+  .filter(Boolean)
+  .filter((p) => !DENY.some((re) => re.test(p)))
+  .map((p) => ({
+    path: p,
+    content: readFileSync(`${projectDir}/${p}`).toString("base64"),
+  }));
+
 const body = {
   uniqueName: `app-${Date.now()}`.slice(0, 32),
   displayName: "My App",
   settings: { port: 3000 }, // must match the port your app listens on
-  upload: {
-    type: "files",
-    files: [
-      {
-        path: "index.js",
-        content: btoa(
-          'require("http").createServer((q,s)=>s.end("ok")).listen(3000)',
-        ),
-      },
-      { path: "package.json", content: btoa('{"name":"app"}') },
-    ],
-  },
+  upload: { type: "files", files },
 };
 
 if (body.uniqueName.length < 4 || body.displayName.length < 4) {
@@ -176,7 +211,10 @@ while (Date.now() < deadline) {
   );
   const d = await s.json();
   if (d.status === "ready") {
-    console.log(`Live: ${d.endpoint}`);
+    // "ready" is the gateway's opinion. Confirm the app answers. A wrong port
+    // reaches this point looking healthy and serves nothing.
+    const probe = await fetch(d.endpoint, { signal: AbortSignal.timeout(15000) });
+    console.log(`Live: ${d.endpoint} (HTTP ${probe.status})`);
     break;
   }
   if (d.status === "failed") throw new Error(d.reason);
