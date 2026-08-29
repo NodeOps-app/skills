@@ -9,6 +9,8 @@ AI agent skills for the [NodeOps](https://nodeops.network) ecosystem. Works with
 | **createos** | Deploy anything to production on CreateOS cloud platform | `npx skills add https://github.com/NodeOps-app/skills --skill createos` |
 | **vercel-to-createos** | Migrate Next.js, Vite, React, Vue, Svelte apps from Vercel to CreateOS | `npx skills add https://github.com/NodeOps-app/skills --skill vercel-to-createos` |
 | **claude-code-to-codex** | Migrate Claude Code CLI hooks, MCP servers, plugins, instructions, and sessions to Codex CLI | `npx skills add https://github.com/NodeOps-app/skills --skill claude-code-to-codex` |
+| **avail-validator-setup** | Stand up and activate an Avail DA validator (Docker-first) — day-0 provisioning through day-1 staking and going active, on Mainnet or Turing testnet | `npx skills add https://github.com/NodeOps-app/skills --skill avail-validator-setup` |
+| **avail-validator-operate** | Day-2 ops for a live Avail DA validator — monitoring, slash-safe upgrades, key backup, chill/unbond, disaster recovery without equivocation | `npx skills add https://github.com/NodeOps-app/skills --skill avail-validator-operate` |
 
 ### Migration skills
 
@@ -17,6 +19,10 @@ AI agent skills for the [NodeOps](https://nodeops.network) ecosystem. Works with
 ### Agent migration skills
 
 `claude-code-to-codex` migrates Claude Code CLI setups to Codex CLI, with focused coverage for hooks, Claude Code CLI MCP servers, plugins, and session handoff.
+
+### Avail validator skills
+
+`avail-validator-setup` and `avail-validator-operate` cover the full lifecycle of an [Avail DA](https://docs.availproject.org/docs/da/operate/become-a-validator) validator, Docker-first and network-parameterized (Mainnet / Turing testnet). `avail-validator-setup` handles day-0 provisioning through day-1 session keys, bonding, and going active; `avail-validator-operate` handles day-2 monitoring, slash-safe upgrades, encrypted key backup, chill/unbond, and disaster recovery — every procedure built around avoiding equivocation/double-signing.
 
 ## CreateOS Authentication
 

@@ -1,0 +1,35 @@
+{
+  "skill_name": "avail-validator-operate",
+  "evals": [
+    {
+      "id": 0,
+      "name": "safe-upgrade-no-equivocation",
+      "prompt": "My Avail validator on mainnet is active and producing blocks (availj/avail in Docker). A new release just dropped and I need to upgrade. I'm paranoid about getting slashed for double-signing. What's the safe upgrade procedure, and how is it different from just pulling the new image and restarting?",
+      "expected_output": "Equivocation explanation, fast stop-before-start path, slow two-box rotate-keys path, anti-patterns, high-stake recommendation, tag verification.",
+      "files": [],
+      "assertions": [
+        "Explicitly explains that double-signing/equivocation slashes the validator and its nominators, and why naive pull+restart is risky",
+        "Fast single-box path stops and confirms the old container is down BEFORE starting the new one, reusing the same volume and node name",
+        "Slow zero-downtime path: Node B on new version, author_rotateKeys for new keys, setKeys via controller, migrate confirmed via logs not UI, then stop Node A",
+        "Names the anti-pattern of running the old and new nodes simultaneously with the same/copied keystore",
+        "Recommends the slow two-box path for a high-stake active mainnet validator",
+        "Says to pin/verify the new image tag and not use :latest"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "disaster-recovery-no-double-sign",
+      "prompt": "Disaster: the server running my active Avail mainnet validator just died (cloud instance gone). I have an encrypted backup of the keystore and network folders. How do I get back to validating WITHOUT equivocating? I'm not 100% sure the old instance is truly dead.",
+      "expected_output": "Equivocation rule, rotate-to-new-keys Path B due to uncertain old node, Path A only if old definitively dead, db re-syncable vs keystore/network secrets, stash/controller from seed.",
+      "files": [],
+      "assertions": [
+        "States that restoring the keystore while the old node may still be running causes double-signing = slashing",
+        "Because old-node status is uncertain, prescribes rotating to NEW session keys (Path B) rather than restoring the old keystore",
+        "Says restoring the old keystore (Path A) is acceptable only if the old instance is definitively destroyed",
+        "Notes db is re-syncable and only keystore + network are the irreplaceable secrets",
+        "States stash/controller are wallet keys recovered from seed/hardware, not from the server backup",
+        "New keys are registered on-chain via setKeys signed by the controller, with activation confirmed via logs"
+      ]
+    }
+  ]
+}
