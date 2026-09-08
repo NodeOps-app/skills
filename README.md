@@ -7,6 +7,7 @@ AI agent skills for the [NodeOps](https://nodeops.network) ecosystem. Works with
 | Skill | Description | Install |
 |-------|-------------|---------|
 | **createos** | Deploy anything to production on CreateOS cloud platform | `npx skills add https://github.com/NodeOps-app/skills --skill createos` |
+| **createos-deploy** | Deploy through the CreateOS MPP Gateway with native MPP or x402 USDC payments | `npx skills add https://github.com/NodeOps-app/skills --skill createos-deploy` |
 | **vercel-to-createos** | Migrate Next.js, Vite, React, Vue, Svelte apps from Vercel to CreateOS | `npx skills add https://github.com/NodeOps-app/skills --skill vercel-to-createos` |
 | **claude-code-to-codex** | Migrate Claude Code CLI hooks, MCP servers, plugins, instructions, and sessions to Codex CLI | `npx skills add https://github.com/NodeOps-app/skills --skill claude-code-to-codex` |
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "CreateOS Deploy"
+  short_description: "Deploy applications through the MPP Gateway"
+  default_prompt: "Use $createos-deploy to inspect, quote, pay for, and verify a CreateOS deployment."

@@ -1,7 +1,7 @@
-# The skill pins an exact viem version in package.json, so a lock file adds no
-# reproducibility and only creates churn when the skill is copied.
+.env
+node_modules/
 package-lock.json
 bun.lock
 bun.lockb
-yarn.lock
 pnpm-lock.yaml
+yarn.lock
