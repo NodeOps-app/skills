@@ -2,8 +2,20 @@
   "name": "createos-deploy",
   "private": true,
   "type": "module",
-  "description": "Runnable deploy script for the CreateOS MPP Gateway",
+  "description": "Deploy applications through the CreateOS MPP Gateway",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "deploy": "node scripts/deploy.mjs"
+  },
   "dependencies": {
-    "viem": "2.55.19"
+    "@bnb-chain/b402": "0.2.1",
+    "@bnb-chain/mpp-b402": "0.2.2",
+    "mppx": "0.9.1",
+    "viem": "2.56.3"
+  },
+  "overrides": {
+    "mppx": "$mppx"
   }
 }
