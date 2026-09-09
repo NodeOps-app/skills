@@ -32,6 +32,8 @@ Provide `PRIVATE_KEY` in the process environment or in a `.env` beside this skil
 ## Safety boundaries
 
 - Inspect the application source and determine its actual listening port before deploying. Do not trust stale deployment metadata.
+- Unique project names are global across the platform, not per wallet. Always append a random suffix to the name, which the bundled script does for you. `GET /agent/projects` only lists your own projects, so it cannot detect a name another account holds.
+- A `5xx` on `POST /agent/deploy` is usually that collision rather than a gateway outage. Treat it as a name conflict first and retry with a fresh suffix; the gateway does not return `409` for names held by other accounts.
 - The first `POST /agent/deploy` may immediately deploy when the wallet has enough unused credits. Quote-only mode prevents a new payment, but it cannot prevent this credit-funded behavior because the API has no separate quote endpoint.
 - Without `--yes`, stop after presenting the selected protocol, network, recipient, and USDC amount.
 - Treat the runtime `402` headers as authoritative. Do not hard-code a default payment chain from discovery metadata.
@@ -57,14 +59,14 @@ The gateway currently models USDC on all supported chains. Always accept only a 
 
 ## Deployment workflow
 
-1. Inspect the project, determine `port`, and validate the project name before any deploy request.
-2. Use `GET /agent/projects` to detect an existing name and show active projects whose runtime could be affected by shared credits.
+1. Inspect the project, determine `port`, and validate the project name before any deploy request. Append a random suffix to the unique name; keep the clean name as the display name.
+2. Use `GET /agent/projects` to detect an existing name and show active projects whose runtime could be affected by shared credits. This check covers your wallet only, so the suffix stays mandatory.
 3. Send `POST /agent/deploy` with fresh wallet-auth headers and no payment credential.
 4. If it returns `200`, deployment has already started using credits.
 5. If it returns `402`, inspect `WWW-Authenticate` for native MPP and `PAYMENT-REQUIRED` for x402. Select only the user-approved protocol and an advertised chain with sufficient USDC.
 6. Create one credential and retry the identical body with either `Authorization` or `PAYMENT-SIGNATURE`.
 7. Preserve `Payment-Receipt` and `PAYMENT-RESPONSE` values in error reporting.
 8. Poll the owned deployment every five seconds until `ready` or `failed`, with a fresh auth nonce each time.
-9. Fetch the endpoint once. `ready` is not proof that the configured port serves traffic.
+9. Wait before fetching the endpoint. `ready` is the platform's status, not the container's: the app still has to boot and bind the port, so the first probes routinely return `404` or refuse the connection. Probe every ten seconds for up to two minutes and only judge the port after that. A `404` that survives the whole window can be the app's real answer at `/`; no answer at all points at the wrong `--port`.
 
 Read [references/api.md](references/api.md) when implementing the flow without the bundled script or diagnosing a gateway response.
