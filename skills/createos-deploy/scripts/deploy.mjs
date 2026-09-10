@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -86,6 +86,9 @@ const HELP = `CreateOS MPP deploy
 Usage:
   node scripts/deploy.mjs --dir <project> --name <unique-name> --port <port> [options]
 
+A random suffix is always appended to --name because unique names are global
+across the platform. --display-name keeps the name you passed.
+
 Options:
   --chain <name>          arbitrum | arbitrum-sepolia | base | bsc
   --protocol <name>       mpp (default) | x402
@@ -157,6 +160,11 @@ const displayName = args.displayName ?? args.name;
 if (displayName.length < 4 || displayName.length > 100) {
   fail("--display-name must contain 4-100 characters");
 }
+
+// Unique names are global across the platform, and a name another account holds
+// fails as an opaque 5xx instead of a 409, so never send the bare name.
+const suffix = randomBytes(3).toString("hex");
+args.name = `${args.name.slice(0, 32 - suffix.length - 1).replace(/-+$/, "")}-${suffix}`;
 if (args.description && (args.description.length < 4 || args.description.length > 2048)) {
   fail("--description must contain 4-2048 characters when provided");
 }
@@ -502,7 +510,10 @@ if (response.ok) {
   process.exit(0);
 }
 if (response.status !== 402) {
-  fail(`Gateway returned ${response.status}: ${JSON.stringify(await readBody(response))}`);
+  const hint = response.status >= 500
+    ? ` A 5xx here usually means the unique name ${args.name} is taken by another account; re-run to draw a fresh suffix.`
+    : "";
+  fail(`Gateway returned ${response.status}: ${JSON.stringify(await readBody(response))}.${hint}`);
 }
 
 const warning = response.headers.get("x-createos-credit-warning");
@@ -606,14 +617,33 @@ async function finishDeployment(deployment) {
     if (status.status !== "ready") continue;
     if (!status.endpoint) fail("Deployment is ready but no endpoint was returned", 4);
 
-    try {
-      const probe = await fetch(status.endpoint, { signal: AbortSignal.timeout(15_000) });
-      console.log(`Live: ${status.endpoint} (HTTP ${probe.status})`);
-      if (probe.status >= 500) fail(`Endpoint returned HTTP ${probe.status}; verify --port ${args.port}`, 5);
-      return;
-    } catch (error) {
-      fail(`Endpoint did not answer; verify --port ${args.port}. ${error instanceof Error ? error.message : error}`, 5);
+    // "ready" is the platform's own status; the container still has to boot and
+    // bind the port after it, so the first probes routinely 404 or refuse.
+    const probeDeadline = Date.now() + 120_000;
+    let lastProbe = "no answer";
+    let lastStatus = 0;
+    while (Date.now() < probeDeadline) {
+      await new Promise((resolveWait) => setTimeout(resolveWait, 10_000));
+      try {
+        const probe = await fetch(status.endpoint, { signal: AbortSignal.timeout(15_000) });
+        lastStatus = probe.status;
+        lastProbe = `HTTP ${probe.status}`;
+        if (probe.status < 400) {
+          console.log(`Live: ${status.endpoint} (${lastProbe})`);
+          return;
+        }
+      } catch (error) {
+        lastStatus = 0;
+        lastProbe = error instanceof Error ? error.message : String(error);
+      }
+      console.log(`Warming up: ${status.endpoint} (${lastProbe})`);
     }
+
+    if (lastStatus >= 400 && lastStatus < 500) {
+      console.log(`Live: ${status.endpoint} (${lastProbe}); the app answered but has no route at /`);
+      return;
+    }
+    fail(`Endpoint did not serve traffic within two minutes (${lastProbe}); verify --port ${args.port}`, 5);
   }
   fail("Timed out after ten minutes waiting for deployment", 4);
 }
