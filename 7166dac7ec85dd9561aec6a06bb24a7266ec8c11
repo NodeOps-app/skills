@@ -1,0 +1,54 @@
+Origin: request to build an asdf skill for devs, companies, AI agents, and CI/CD,
+after reading the asdf repo README, source, and docs/.
+
+Research method
+- Four parallel agents over docs/{guide,manage,plugins,more} plus the Go source.
+- Every command and flag cross-checked against internal/cli/cli.go and a live
+  asdf 0.18.0 binary. Docs alone were not trusted.
+
+Source-of-truth findings that shaped the content
+- asdf-vm/actions v4.0.0 is the first release supporting asdf 0.16+; v3 and
+  earlier drive the 0.15 bash implementation only.
+- use_release_candidates is commented out in the 0.16+ config struct and has no
+  effect, despite still appearing in the official docs.
+- Caching all of ~/.asdf breaks asdf-vm/actions (asdf-vm/actions#445); cache
+  installs/, plugins/, downloads/ instead.
+- Multi-tool plugin repos (asdf-community/asdf-hashicorp serves terraform,
+  vault, consul, packer, nomad) select their tool by reading the basename of the
+  directory asdf cloned them into, so the local plugin name is load-bearing.
+- Plugin miss error, verified: "error fetching plugin URL: plugin <name> not
+  found in repository".
+- asdf list exits 0 even when its version filter matches nothing, and the filter
+  is a prefix match, so exit-status checks for an installed version are wrong.
+
+Validation
+- Two eval iterations, 4 then 5 scenarios, each run with and without the skill
+  and graded against per-scenario assertions.
+- Iteration 1: 100% with skill vs 76% baseline. Gap concentrated in
+  troubleshooting (6/6 vs 3/6) and CI (6/6 vs 4/6); onboarding tied at 6/6,
+  i.e. the common path is already well covered by base knowledge.
+- Baseline was advantaged: runs executed inside the asdf repo, and one baseline
+  agent read cli.go to derive that asdf local was removed. The delta is
+  therefore conservative.
+- Iteration 2 added a plugin-sourcing scenario after review feedback that not
+  every plugin resolves via a bare short name. With skill 8/8, baseline 7/8 —
+  the baseline pinned asdf v0.14.1 and sourced asdf.sh in a script intended for
+  every teammate and CI.
+
+Post-eval static review (Codex) caught five defects the simulated runs missed,
+all since fixed:
+- GitHub Actions env: PATH: expands to "/.asdf/shims:" because the env context
+  does not inherit the runner HOME/PATH, replacing rather than extending PATH.
+- An installed-version check relying on asdf list exit status (see above).
+- configure --prefix pointing at a temp dir, which bakes a deleted path into
+  built artifacts; replaced with real prefix plus DESTDIR staging.
+- Docker runtime stage copying ASDF_DATA_DIR without the asdf binary the shims
+  invoke.
+- PowerShell reading bare $ASDF_DATA_DIR (a script variable) instead of
+  $env:ASDF_DATA_DIR; this bug is inherited verbatim from the upstream docs.
+
+Known gap
+- Nothing in the skill has been executed end to end. All evals were simulated
+  and all verification was against source, the local binary, or static review.
+  A sandbox smoke test of the onboarding flow and the generated plugin is the
+  recommended next step.
