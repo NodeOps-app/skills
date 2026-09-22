@@ -11,6 +11,7 @@ Each migration skill reads the source platform's configuration, maps it to Creat
 | Skill | Description | Install |
 |-------|-------------|---------|
 | **vercel-to-createos** | Migrate Next.js, Vite, React, Vue, Svelte apps from Vercel to CreateOS | `npx skills add https://github.com/NodeOps-app/skills --skill vercel-to-createos` |
+| **netlify-to-createos** | Migrate web applications from Netlify to CreateOS — parses netlify.toml, maps build settings, env vars, redirects, and headers | `npx skills add https://github.com/NodeOps-app/skills --skill netlify-to-createos` |
 
 ## Coming soon
 
@@ -18,7 +19,6 @@ These skills are reserved namespaces with stub `SKILL.md` files in place. Until 
 
 | Skill | Source platform | Config file(s) it will parse |
 |-------|----------------|------------------------------|
-| **netlify-to-createos** | Netlify | `netlify.toml` |
 | **railway-to-createos** | Railway | `railway.json` or `railway.toml` |
 | **heroku-to-createos** | Heroku | `Procfile`, `app.json` |
 | **render-to-createos** | Render | `render.yaml` |

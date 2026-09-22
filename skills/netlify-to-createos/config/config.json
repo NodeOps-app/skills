@@ -1,0 +1,77 @@
+{
+  "name": "netlify-to-createos",
+  "version": "1.0.0",
+  "description": "Migration skill: Netlify to CreateOS",
+
+  "source": {
+    "platform": "netlify",
+    "configFiles": ["netlify.toml"],
+    "secondaryConfigFiles": ["package.json"]
+  },
+
+  "frameworkDetection": {
+    "nextjs": { "detect": ["next.config.js", "next.config.mjs"], "createosSlug": "nextjs", "runtimes": ["node:18", "node:20", "node:22"] },
+    "react": { "detect": ["vite.config.ts", "craco.config.js"], "createosSlug": "reactjs-spa", "runtimes": ["node:18", "node:20", "node:22"] },
+    "vue": { "detect": ["vue.config.js", "nuxt.config.js"], "createosSlug": "vuejs-spa", "runtimes": ["node:18", "node:20"] },
+    "astro": { "detect": ["astro.config.mjs"], "createosSlug": "astro", "runtimes": ["node:18", "node:20", "node:22"] },
+    "eleventy": { "detect": [".eleventy.js"], "createosSlug": "static", "runtimes": ["static"] },
+    "hugo": { "detect": ["hugo.toml", "config.toml"], "createosSlug": "static", "runtimes": ["static"] },
+    "gatsby": { "detect": ["gatsby-config.js", "gatsby-config.ts"], "createosSlug": "reactjs-ssr", "runtimes": ["node:18", "node:20"] },
+    "svelte": { "detect": ["svelte.config.js"], "createosSlug": "static", "runtimes": ["node:18", "node:20"] },
+    "angular": { "detect": ["angular.json"], "createosSlug": "static", "runtimes": ["node:18", "node:20"] }
+  },
+
+  "featureSupport": {
+    "buildSettings": { "status": "automated", "notes": "netlify.toml [build] → CreateProject.settings" },
+    "envVars": { "status": "automated", "notes": "Mapped via UpdateProjectEnvironmentEnvironmentVariables" },
+    "redirects": { "status": "manual", "notes": "Implement via app-level routing" },
+    "headers": { "status": "manual", "notes": "Implement via app-level config" },
+    "functions": { "status": "manual", "notes": "Rewrite as REST endpoints + separate project" },
+    "edgeFunctions": { "status": "unsupported", "notes": "No CreateOS equivalent" },
+    "backgroundFunctions": { "status": "unsupported", "notes": "Use queue workers / cron jobs" },
+    "plugins": { "status": "manual", "notes": "Per-plugin assessment required" },
+    "forms": { "status": "unsupported", "notes": "Recommend Formspree, Web3Forms, custom" },
+    "identity": { "status": "unsupported", "notes": "Recommend Auth0, Clerk, Supabase" },
+    "splitTesting": { "status": "unsupported", "notes": "Use app-level A/B testing" },
+    "deployPreviews": { "status": "automated", "notes": "Branch-based environments" },
+    "branchDeploy": { "status": "automated", "notes": "CreateProjectEnvironment per branch" }
+  },
+
+  "envVarMapping": {
+    "NETLIFY": { "action": "remove", "reason": "Netlify-specific, not needed on CreateOS" },
+    "CONTEXT": { "action": "remove", "reason": "Netlify-specific, hardcode if needed" },
+    "URL": { "action": "replace", "target": "CREATEOS_DEPLOYMENT_URL", "reason": "Deployment URL" },
+    "DEPLOY_URL": { "action": "replace", "target": "CREATEOS_DEPLOYMENT_URL", "reason": "Deployment URL" },
+    "DEPLOY_PRIME_URL": { "action": "replace", "target": "CREATEOS_DEPLOYMENT_URL", "reason": "Deployment URL" },
+    "DEPLOY_PREVIEW_URL": { "action": "replace", "target": "CREATEOS_DEPLOYMENT_URL", "reason": "Preview URL" },
+    "NETLIFY_DEV": { "action": "remove", "reason": "Local dev only" },
+    "NETLIFY_URL": { "action": "remove", "reason": "Netlify-specific" },
+    "NETLIFY_LFS": { "action": "remove", "reason": "Netlify-specific" },
+    "NETLIFY_LOCAL": { "action": "remove", "reason": "Local dev only" }
+  },
+
+  "codePatterns": [
+    { "pattern": "process\\.env\\.NETLIFY", "severity": "warn", "action": "flag", "message": "Netlify-specific env var" },
+    { "pattern": "exports\\.handler", "severity": "warn", "action": "flag", "message": "Netlify Functions handler pattern" },
+    { "pattern": "@netlify/functions", "severity": "warn", "action": "flag", "message": "Netlify Functions SDK" },
+    { "pattern": "@netlify/", "severity": "info", "action": "flag", "message": "Netlify package" },
+    { "pattern": "netlify-", "severity": "info", "action": "flag", "message": "Netlify-specific code" }
+  ],
+
+  "supportedRuntimes": ["node:18", "node:20", "node:22", "python:3.11", "python:3.12", "golang:1.22", "golang:1.25", "rust:1.75", "bun:1.1", "bun:1.3", "static"],
+
+  "resourceDefaults": {
+    "cpu": 200,
+    "memory": 500,
+    "replicas": 1,
+    "cpuMax": 500,
+    "memoryMax": 1024,
+    "replicasMax": 3
+  },
+
+  "namingConstraints": {
+    "uniqueName": { "pattern": "^[a-zA-Z0-9-]+$", "minLength": 4, "maxLength": 32 },
+    "displayName": { "pattern": "^[a-zA-Z0-9 _-]+$", "minLength": 4, "maxLength": 48 },
+    "description": { "minLength": 4, "maxLength": 2048 }
+  }
+}
