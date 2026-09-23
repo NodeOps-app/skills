@@ -26,8 +26,7 @@ Use the repository for the application's target language as the source of truth 
 - [Java SDK](https://github.com/NodeOps-app/createos-java-sdk)
 - [Rust SDK](https://github.com/NodeOps-app/createos-rust-sdk)
 - [C# SDK](https://github.com/NodeOps-app/createos-csharp-sdk)
-
-The TypeScript target uses [`@nodeops-createos/sandbox`](https://github.com/NodeOps-app/createos-sandbox-sdk).
+- [TypeScript SDK (`@nodeops-createos/sandbox`)](https://github.com/NodeOps-app/createos-sandbox-sdk)
 
 ## Migration workflow
 
