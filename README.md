@@ -9,12 +9,15 @@ AI agent skills for the [NodeOps](https://nodeops.network) ecosystem. Works with
 | **createos** | Deploy anything to production on CreateOS cloud platform | `npx skills add https://github.com/NodeOps-app/skills --skill createos` |
 | **createos-deploy** | Deploy through the CreateOS MPP Gateway with native MPP or x402 USDC payments | `npx skills add https://github.com/NodeOps-app/skills --skill createos-deploy` |
 | **vercel-to-createos** | Migrate Next.js, Vite, React, Vue, Svelte apps from Vercel to CreateOS | `npx skills add https://github.com/NodeOps-app/skills --skill vercel-to-createos` |
+| **daytona-to-createos-sandbox** | Migrate Daytona sandbox SDK, CLI, and API usage to CreateOS Sandbox (TS, Python, Go, Java, Rust, C#) | `npx skills add https://github.com/NodeOps-app/skills --skill daytona-to-createos-sandbox` |
 | **claude-code-to-codex** | Migrate Claude Code CLI hooks, MCP servers, plugins, instructions, and sessions to Codex CLI | `npx skills add https://github.com/NodeOps-app/skills --skill claude-code-to-codex` |
 | **asdf** | Pin and reproduce runtime/CLI tool versions with asdf 0.16+ — `.tool-versions`, shims, CI/CD, plugin authoring | `npx skills add https://github.com/NodeOps-app/skills --skill asdf` |
 
 ### Migration skills
 
 `vercel-to-createos` is the first shipped skill in the migration family. Stubs for `netlify-to-createos`, `railway-to-createos`, `heroku-to-createos`, `render-to-createos`, and `flyio-to-createos` are reserved and route users to the concierge migration path until they ship. See [MIGRATIONS.md](./MIGRATIONS.md) for the full list and roadmap.
+
+`daytona-to-createos-sandbox` moves Daytona sandbox workloads to CreateOS Sandbox using the CreateOS Sandbox SDKs and `createos sandbox` CLI. The SDKs read `CREATEOS_SANDBOX_API_KEY` (TypeScript, Go) or `CREATEOS_API_KEY` (Python, Java, Rust, C#).
 
 ### Agent migration skills
 
