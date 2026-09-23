@@ -11,6 +11,7 @@ Each migration skill reads the source platform's configuration, maps it to Creat
 | Skill | Description | Install |
 |-------|-------------|---------|
 | **vercel-to-createos** | Migrate Next.js, Vite, React, Vue, Svelte apps from Vercel to CreateOS | `npx skills add https://github.com/NodeOps-app/skills --skill vercel-to-createos` |
+| **daytona-to-createos-sandbox** | Migrate Daytona sandbox SDK, CLI, and API usage to CreateOS Sandbox (uses the Sandbox SDKs/CLI, not the MCP deploy flow) | `npx skills add https://github.com/NodeOps-app/skills --skill daytona-to-createos-sandbox` |
 
 ## Coming soon
 
