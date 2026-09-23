@@ -53,7 +53,7 @@ The documented top-level `createos` imports work at runtime. If a project runs m
 
 ## Go
 
-Daytona's Go SDK (`github.com/daytona/clients/sdk-go`, legacy `github.com/daytonaio/daytona/libs/sdk-go`) calls differ from CreateOS's `github.com/NodeOps-app/createos-go-sdk` module. The CreateOS Go SDK targets Go 1.25 and reads `CREATEOS_SANDBOX_API_KEY` when no explicit key is passed. Use `strings.NewReader` or another `io.Reader` for uploads. Downloads return an `io.ReadCloser`; close it and use `io.ReadAll` when the application needs the bytes.
+Daytona's Go SDK (`github.com/daytona/clients/sdk-go`, legacy `github.com/daytonaio/daytona/libs/sdk-go`) calls differ from CreateOS's `github.com/NodeOps-app/createos-go-sdk` module. The CreateOS Go SDK targets Go 1.25 and reads `CREATEOS_API_KEY` when no explicit key is passed. Use `strings.NewReader` or another `io.Reader` for uploads. Downloads return an `io.ReadCloser`; close it and use `io.ReadAll` when the application needs the bytes.
 
 ```go
 client, err := sandbox.NewClient()

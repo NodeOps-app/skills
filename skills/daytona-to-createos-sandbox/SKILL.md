@@ -16,7 +16,7 @@ Use when the user wants to move a project off Daytona, replace Daytona SDK/API/C
 - Access to the application's source is sufficient for code migration. Daytona or CreateOS account access is needed only for live inventory, data transfer, or a live smoke test.
 - CreateOS API keys come from <https://createos.sh/app/profile>. CLI users run `createos login` (browser) or `createos login --token "$TOKEN"` in CI.
 - Check the application's runtime and package versions. The CreateOS TypeScript package is ESM-only and requires Node 20+; Python needs 3.10+; Go 1.25+; Java 17; Rust 1.98+ (`createos` 0.1.1); C# .NET 8. Confirm other SDK signatures against the version actually installed.
-- Credential variable names differ by SDK. TypeScript and Go read `CREATEOS_SANDBOX_API_KEY`; Python, Java, Rust, and C# read `CREATEOS_API_KEY`. All SDKs read the base URL override from `CREATEOS_SANDBOX_BASE_URL` (default `https://api.sb.createos.sh`). Do not print secret values, copy them into committed files, or replace a Daytona key with a CreateOS key in a shared variable.
+- Credential variable names differ by SDK. TypeScript reads `CREATEOS_SANDBOX_API_KEY`; Go, Python, Java, Rust, and C# read `CREATEOS_API_KEY`. All SDKs read the base URL override from `CREATEOS_SANDBOX_BASE_URL` (default `https://api.sb.createos.sh`). Do not print secret values, copy them into committed files, or replace a Daytona key with a CreateOS key in a shared variable.
 - Check the account's plan before choosing resources. Free allows 1 concurrent sandbox, 0 disks, 0 templates, and at most 1 vCPU / 1 GB; creates beyond the concurrency cap fail instead of queueing. Beginner and above allow disks and templates. `whoami` returns the running count.
 
 ## Official CreateOS SDK sources

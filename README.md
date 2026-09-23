@@ -17,7 +17,7 @@ AI agent skills for the [NodeOps](https://nodeops.network) ecosystem. Works with
 
 `vercel-to-createos` is the first shipped skill in the migration family. Stubs for `netlify-to-createos`, `railway-to-createos`, `heroku-to-createos`, `render-to-createos`, and `flyio-to-createos` are reserved and route users to the concierge migration path until they ship. See [MIGRATIONS.md](./MIGRATIONS.md) for the full list and roadmap.
 
-`daytona-to-createos-sandbox` moves Daytona sandbox workloads to CreateOS Sandbox using the CreateOS Sandbox SDKs and `createos sandbox` CLI. The SDKs read `CREATEOS_SANDBOX_API_KEY` (TypeScript, Go) or `CREATEOS_API_KEY` (Python, Java, Rust, C#).
+`daytona-to-createos-sandbox` moves Daytona sandbox workloads to CreateOS Sandbox using the CreateOS Sandbox SDKs and `createos sandbox` CLI. The SDKs read `CREATEOS_SANDBOX_API_KEY` (TypeScript) or `CREATEOS_API_KEY` (Go, Python, Java, Rust, C#).
 
 ### Agent migration skills
 
