@@ -5,8 +5,8 @@
   "mcp": {
     "endpoint": "https://api-createos.nodeops.network/mcp",
     "transport": "sse",
-    "authentication": "handled_by_mcp_server",
-    "note": "When using MCP (OpenClaw, Claude, etc.), NO API KEY NEEDED. Just call tools directly."
+    "authentication": "oauth_or_api_key",
+    "note": "Requires auth: OAuth sign-in in clients that support it, or a CreateOS API key in the X-Api-Key header for headless agents."
   },
   "rest_api": {
     "base_url": "https://api-createos.nodeops.network",

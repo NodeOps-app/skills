@@ -10,8 +10,9 @@ description: "Deploy ANYTHING to production on CreateOS cloud platform. Use this
 ## ⚠️ IMPORTANT: Authentication
 
 ### For AI Agents (MCP) - USE THIS
-When connected via MCP (OpenClaw, MoltBot, ClawdBot, Claude), **NO API KEY NEEDED**.
-The MCP server handles authentication automatically.
+The MCP server requires authentication; an unauthenticated request gets `401`.
+- **Clients with OAuth support** (Claude, Cursor and similar): the client opens a CreateOS sign-in on first connect.
+- **Headless agents and CI:** send your CreateOS API key in the `X-Api-Key` header. Get a key from **Profile Settings > API Keys** in the CreateOS dashboard.
 
 **MCP Endpoint:** `https://api-createos.nodeops.network/mcp`
 
